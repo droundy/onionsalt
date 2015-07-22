@@ -8,3 +8,5 @@
 *Notes.bib
 
 *.o
+*.test
+.fac
