@@ -6,6 +6,18 @@
 \author{David Roundy}
 \affiliation{Department of Physics, Oregon State University, Corvallis, OR 97331}
 
+\begin{abstract}
+  In this paper, we introduce a layered ``onion'' encryption scheme
+  based on the NaCl library.  The onion salt protocol uses unmodified
+  NaCl decryption for each layer, with zero padding in the plain text
+  to ensure that the agent decrypting a given layer has no means to
+  determine either how many layers remain or the size of the interior
+  message.  As in the standard NaCl unbox function, each agent
+  removing a layer of encryption can authenticate that the message was
+  not modified in transit.  In order to acheive this we do some clever
+  tricks.
+\end{abstract}
+
 \maketitle
 
 Tarzan is a low-latency peer-to-peer anonymizing layer that acts at
