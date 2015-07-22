@@ -1,0 +1,1 @@
+| pdflatex onionsalt.tex && bibtex onionsalt && pdflatex onionsalt.tex && pdflatex onionsalt.tex

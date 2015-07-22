@@ -1,0 +1,8 @@
+*.tum
+*~
+*.aux
+*.bbl
+*.blg
+*.log
+*.pdf
+*Notes.bib
