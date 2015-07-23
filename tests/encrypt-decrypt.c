@@ -20,24 +20,24 @@ int main() {
 
 	randombytes(nonce, crypto_box_NONCEBYTES);
 
-	crypto_box_keypair(pk, sk);
-	crypto_box_keypair(pk2, sk2);
+	assert(!crypto_box_keypair(pk, sk));
+	assert(!crypto_box_keypair(pk2, sk2));
 
   unsigned char *plaintext = calloc(1, message_len + crypto_box_ZEROBYTES);
   memcpy(plaintext + crypto_box_ZEROBYTES, message, message_len);
 
   unsigned char *ciphertext = malloc(message_len + crypto_box_ZEROBYTES);
 
-  crypto_box(ciphertext, plaintext, message_len + crypto_box_ZEROBYTES,
-             nonce, pk2, sk);
+  assert(!crypto_box(ciphertext, plaintext, message_len + crypto_box_ZEROBYTES,
+                     nonce, pk2, sk));
 
   /* crypto_box leaves some blank padding at the beginning of the
      ciphertext, which we will want to strip when transimitting. */
   for (int i=0; i<crypto_box_BOXZEROBYTES; i++) assert(!ciphertext[i]);
 
   unsigned char *newplaintext = malloc(message_len + crypto_box_ZEROBYTES);
-  crypto_box_open(newplaintext,ciphertext, message_len + crypto_box_ZEROBYTES,
-                  nonce, pk, sk2);
+  assert(!crypto_box_open(newplaintext,ciphertext, message_len + crypto_box_ZEROBYTES,
+                          nonce, pk, sk2));
 
   /* Verify that crypto_box_open gives us back our padded plaintext. */
   for (int i=0; i<message_len + crypto_box_ZEROBYTES; i++) {
