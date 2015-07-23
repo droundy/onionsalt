@@ -2,6 +2,8 @@
 #define FOR(i,n) for (i = 0;i < n;++i)
 #define sv static void
 
+#include <stdio.h>
+
 typedef unsigned char u8;
 typedef unsigned long u32;
 typedef unsigned long long u64;
@@ -462,6 +464,10 @@ int crypto_box_beforenm(u8 *k,const u8 *y,const u8 *x)
 
 int crypto_box_afternm(u8 *c,const u8 *m,u64 d,const u8 *n,const u8 *k)
 {
+  int i;
+  for (i=0;i<32;i++) {
+    printf("k[%2d] = %02x  n[%2d] = %02x\n", i, k[i], i, n[i]);
+  }
   return crypto_secretbox(c,m,d,n,k);
 }
 

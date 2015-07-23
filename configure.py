@@ -87,7 +87,8 @@ for s in sources:
     print('> src/%s.o' % (s))
     print()
 
-ctests = ['null', 'encrypt-decrypt', 'authentication', 'onion-box']
+ctests = ['null', 'encrypt-decrypt', 'authentication', 'onion-box', 'unpeel-onion',
+          'encrypt-encrypted-same-nonce']
 
 for test in ctests:
     print('| %s '%cc+' '.join(linkflags)+' -o tests/%s.test' % (test),

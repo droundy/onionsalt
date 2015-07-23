@@ -1,5 +1,7 @@
 #include "onionsalt.h"
 
+#include <assert.h>
+#include <stdio.h>
 #include <string.h>
 
 extern int onion_box(unsigned char *ciphertext,
@@ -37,17 +39,18 @@ extern int onion_box(unsigned char *ciphertext,
   }
   unsigned char *plaintext = buffer + num_layers*(crypto_box_PUBLICKEYBYTES + crypto_box_SECRETKEYBYTES);
 
-  memset(plaintext, 0, cb_len);
+  memset(ciphertext, 0, cb_len);
   for (int i=0;i<num_layers;i++) {
+    memcpy(plaintext + crypto_box_ZEROBYTES,
+           ciphertext + crypto_box_ZEROBYTES + layer_overhead,
+           cb_len - crypto_box_BOXZEROBYTES - layer_overhead);
+    memset(plaintext, 0, crypto_box_ZEROBYTES);
+    memset(plaintext + cb_len - layer_overhead, 0, layer_overhead);
+    printf("crypto_box initially with %d\n", i);
     int retval = crypto_box(ciphertext, plaintext, cb_len, nonce,
                             their_public_keys + i*crypto_box_PUBLICKEYBYTES,
                             my_secret_keys+i*crypto_box_SECRETKEYBYTES);
     if (retval) return retval;
-    memcpy(plaintext + crypto_box_ZEROBYTES,
-           ciphertext + crypto_box_BOXZEROBYTES + layer_overhead,
-           cb_len - crypto_box_BOXZEROBYTES - layer_overhead);
-    memset(plaintext, 0, crypto_box_ZEROBYTES);
-    memset(plaintext + cb_len - layer_overhead, 0, layer_overhead);
   }
   /* At this stage, plaintext should be set up for the innermost layer
      of the onion, with everything but the actual plaintext that we
@@ -60,16 +63,28 @@ extern int onion_box(unsigned char *ciphertext,
       memcpy(plaintext + crypto_box_ZEROBYTES, address_labels + i*address_label_length, address_label_length);
     }
     /* Now we encrypt the plaintext, which expands it just a tad. */
+    printf("crypto_box finally with %d\n", i);
     int retval = crypto_box(ciphertext, plaintext, cb_len, nonce,
                             their_public_keys + i*crypto_box_PUBLICKEYBYTES,
                             my_secret_keys+i*crypto_box_SECRETKEYBYTES);
     if (retval) return retval;
+    printf("WORKING ON i=%d\n", i);
+    for (int i=0;i<cb_len;i++) {
+      printf("%02x\n", ciphertext[i]);
+    }
+    if (i < num_layers-1) {
+      for (long long j=cb_len - layer_overhead; j<cb_len; j++) {
+        printf("j = %lld\n", j);
+        //assert(!ciphertext[j]); FIXME THIS ASSERTION NEEDS TO WORK!
+      }
+    }
     /* Now to construct our message, we need to add our public key at
        the very beginning, which means budging things over a tad.
        And, of course, copying over to plaintext for the next round of
        fun. */
     memcpy(plaintext + crypto_box_PUBLICKEYBYTES + crypto_box_ZEROBYTES,
-           ciphertext + crypto_box_BOXZEROBYTES, cb_len - crypto_box_ZEROBYTES);
+           ciphertext + crypto_box_BOXZEROBYTES,
+           cb_len - crypto_box_ZEROBYTES);
     /* Finally, we just need to copy our public key into the gap we left. */
     memcpy(plaintext + crypto_box_ZEROBYTES,
            my_public_keys + i*crypto_box_PUBLICKEYBYTES,
