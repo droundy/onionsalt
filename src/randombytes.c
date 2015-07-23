@@ -4,7 +4,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-void randombytes(unsigned char * ptr,unsigned int length) 
+void randombytes(unsigned char * ptr,unsigned int length)
 {
 	char failed = 0;
 #ifdef WIN32
