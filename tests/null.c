@@ -1,3 +1,5 @@
+#include "tweetnacl.h"
+
 int main() {
   return 0;
 }

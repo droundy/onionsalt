@@ -99,7 +99,7 @@ for test in ctests:
         print('< src/%s.o' % (s))
     print()
 
-    print('| cd tests && %s %s -o %s.o -c %s.c'
+    print('| cd tests && %s %s -I../src -o %s.o -c %s.c'
           % (cc, ' '.join(flags), test, test))
     print('> tests/%s.o' % (test))
     print()
