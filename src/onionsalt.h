@@ -10,16 +10,14 @@
 
 /*
 
-ciphertext[crypto_box_ZEROBYTES
-           + interior_plaintext_length
-           + (num_layers-1)*address_label_length
-           + num_layers*onion_box_LAYEROVERHEADBYTES]
+ciphertext[crypto_box_ZEROBYTES + interior_plaintext_length
+           + (num_layers+1)*(address_length + onion_box_LAYEROVERHEADBYTES)]
 
-    holds the output ciphertext, of which the first
+    holds the output ciphertext (and a bit extra), of which the first
     crypto_box_BOXZEROBYTES will be zero.
 
-
-buffer[interior_plaintext_length + crypto_box_ZEROBYTES
+buffer[crypto_box_ZEROBYTES + interior_plaintext_length
+       + (num_layers+1)*(address_length + onion_box_LAYEROVERHEADBYTES)
        + num_layers*onion_box_PERLAYERBUFFERBYTES]
 
     is just a buffer used for intermediate values.  Should be set to

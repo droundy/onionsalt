@@ -13,11 +13,11 @@ with open('testing-flags/test.c', 'w') as f:
 
 # add , '-fprofile-arcs', '-ftest-coverage' to both of the following
 # lines in order to enable gcov coverage testing
-optional_flags = ['-Wall', '-Werror', '-O2', '-g']
+optional_flags = ['-Wall', '-Werror']
 optional_linkflags = ['-lprofiler']
 
-possible_flags = ['-std=c11', '-std=c99', '-flto']
-possible_linkflags = ['-flto']
+possible_flags = ['-std=c11', '-std=c99', '-flto', '-O2', '-g']
+possible_linkflags = ['-flto', '-O2', '-g']
 
 if os.getenv('MINIMAL') == None:
     print('# We are not minimal')
@@ -87,7 +87,7 @@ for s in sources:
     print('> src/%s.o' % (s))
     print()
 
-ctests = ['null', 'encrypt-decrypt', 'authentication']
+ctests = ['null', 'encrypt-decrypt', 'authentication', 'onion-box']
 
 for test in ctests:
     print('| %s '%cc+' '.join(linkflags)+' -o tests/%s.test' % (test),

@@ -69,7 +69,7 @@ extern int onion_box(unsigned char *ciphertext,
        And, of course, copying over to plaintext for the next round of
        fun. */
     memcpy(plaintext + crypto_box_PUBLICKEYBYTES + crypto_box_ZEROBYTES,
-           ciphertext + crypto_box_BOXZEROBYTES, cb_len - crypto_box_BOXZEROBYTES);
+           ciphertext + crypto_box_BOXZEROBYTES, cb_len - crypto_box_ZEROBYTES);
     /* Finally, we just need to copy our public key into the gap we left. */
     memcpy(plaintext + crypto_box_ZEROBYTES,
            my_public_keys + i*crypto_box_PUBLICKEYBYTES,
