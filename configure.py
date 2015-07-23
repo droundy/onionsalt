@@ -80,7 +80,7 @@ flags = list(filter(None, flags))
 config['flags'] = flags
 config['linkflags'] = linkflags
 
-sources = ['tweetnacl']
+sources = ['tweetnacl', 'randombytes']
 
 for s in sources:
     print('| cd src && %s %s -o %s.o -c %s.c' % (cc, ' '.join(flags), s, s))
