@@ -1,5 +1,7 @@
 \documentclass[letterpaper,twocolumn,amsmath,amssymb,pre,aps,10pt]{revtex4-1}
 
+\usepackage{graphicx}
+
 \begin{document}
 
 \title{The Onion Salt Layered Encryption Scheme}
@@ -33,6 +35,15 @@ Here is a nice paper to read on distributed hash tables and security
 considerations involved~\cite{sit2002security}.  And here is a nice
 one about how you need a critical mass in order to ensure
 anonymity~\cite{dingledine2006anonymity}.
+
+\begin{figure*}
+  \begin{center}
+    \includegraphics[width=\textwidth]{onion-decryption}
+  \end{center}
+  \caption{A diagram of the decryption process.  Red dotted lines
+    represent decryption, and black dotted lines simply represent
+    cutting out the address information.}
+\end{figure*}
 
 \bibliography{onionsalt}% Produces the bibliography via BibTeX.
 

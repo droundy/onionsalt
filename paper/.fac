@@ -1,1 +1,3 @@
 | pdflatex onionsalt.tex && bibtex onionsalt && pdflatex onionsalt.tex && pdflatex onionsalt.tex
+
+| python3 create-figures.py
