@@ -2,6 +2,7 @@
 
 #include <assert.h>
 #include <string.h>
+#include <stdio.h>
 
 extern int onion_box(unsigned char *ciphertext,
                      unsigned char *buffer,
@@ -85,10 +86,12 @@ extern int onion_box(unsigned char *ciphertext,
            crypto_box_PUBLICKEYBYTES);
     memset(plaintext, 0, crypto_box_ZEROBYTES);
   }
-  memmove(ciphertext + crypto_box_BOXZEROBYTES,
+  memmove(ciphertext + onion_box_AUTHENTICATIONBYTES,
           ciphertext,
-          cb_length - crypto_box_BOXZEROBYTES - layer_overhead);
-  memset(ciphertext + cb_length - layer_overhead, 0, layer_overhead);
+          cb_length - layer_overhead);
+  memcpy(ciphertext, my_public_keys, crypto_box_PUBLICKEYBYTES);
+  printf("cb_length is %lld, layer_overhead is %lld\n", cb_length, layer_overhead);
+
   memset(buffer, 0, cb_length + num_layers*onion_box_PERLAYERBUFFERBYTES);
 
   return 0;
@@ -96,23 +99,24 @@ extern int onion_box(unsigned char *ciphertext,
 
 int onion_box_open(unsigned char *plaintext,
                    unsigned char *ciphertext,
-                   unsigned long long length,
+                   unsigned long long cb_length,
                    unsigned long long address_length,
                    const unsigned char *secret_key) {
   const long long layer_overhead = address_length + onion_box_LAYEROVERHEADBYTES;
-  const long long cb_length = crypto_box_BOXZEROBYTES + length - crypto_box_PUBLICKEYBYTES;
 
+  printf("cb_length is %lld, layer_overhead is %lld\n", cb_length, layer_overhead);
   /* first rescue the public key */
   unsigned char public_key[crypto_box_PUBLICKEYBYTES];
   memcpy(public_key, ciphertext, crypto_box_PUBLICKEYBYTES);
   /* then shift things into place for the decryption. */
+  assert(crypto_box_PUBLICKEYBYTES == crypto_box_ZEROBYTES);
   memmove(ciphertext + crypto_box_BOXZEROBYTES,
           ciphertext + crypto_box_PUBLICKEYBYTES,
-          length - crypto_box_PUBLICKEYBYTES - layer_overhead);
+          cb_length - crypto_box_PUBLICKEYBYTES);
   /* zero out the initial padding */
   memset(ciphertext, 0, crypto_box_BOXZEROBYTES);
   /* zero out the extra padding at the end */
-  memset(ciphertext + (cb_length - layer_overhead), 0, layer_overhead);
+  //memset(ciphertext + cb_length - layer_overhead, 0, layer_overhead);
   /* we just always use a zero nonce, since we never reuse a public
      key for encryption */
   unsigned char nonce[crypto_box_NONCEBYTES] = {0};

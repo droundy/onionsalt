@@ -109,6 +109,7 @@ auth_overhead = zerobytes - boxzerobytes
 layer_overhead = address_len + auth_overhead + publickeybytes
 encrypted_length = secret_length + auth_overhead + (num_layers-1)*layer_overhead
 cb_length = boxzerobytes + encrypted_length + layer_overhead
+transmitted_length = encrypted_length + publickeybytes
 
 assert(cb_length == secret_length + zerobytes + num_layers*layer_overhead)
 
@@ -143,7 +144,7 @@ def annotate_dim(xyfrom,xyto,text):
 annotate_dim([0, ybottom0], [cb_length, ybottom0], 'crypto_box length')
 annotate_dim([boxzerobytes, ybottom1], [boxzerobytes+encrypted_length, ybottom1], 'encrypted length')
 annotate_dim([-16, ybottom2],
-             [boxzerobytes+encrypted_length, ybottom2], 'transmitted length')
+             [-16 + transmitted_length, ybottom2], 'transmitted length')
 
 for i in range(num_layers):
     if i > 0:
