@@ -15,9 +15,9 @@ int main() {
 	unsigned char pk[crypto_box_PUBLICKEYBYTES];
 	assert(!crypto_box_keypair(pk, sk));
 
-  const int interior_plaintext_length = 137;
-  unsigned char *interior_plaintext = malloc(interior_plaintext_length);
-	randombytes(interior_plaintext, interior_plaintext_length);
+  const int secret_length = 137;
+  unsigned char *secret = malloc(secret_length);
+	randombytes(secret, secret_length);
 
   const int num_layers = 5;
   const int address_length = 30;
@@ -31,14 +31,14 @@ int main() {
                                secret_keys + i*crypto_box_SECRETKEYBYTES));
   }
 
-  unsigned long long cb_len = crypto_box_ZEROBYTES + interior_plaintext_length
-    + (num_layers+1)*(address_length + onion_box_LAYEROVERHEADBYTES);
+  unsigned long long layer_overhead = address_length + onion_box_LAYEROVERHEADBYTES;
+  unsigned long long cb_len = crypto_box_ZEROBYTES + secret_length + num_layers*layer_overhead;
   unsigned char *ciphertext = malloc(cb_len);
-  unsigned char *buffer = malloc(cb_len + num_layers*(crypto_box_SECRETKEYBYTES + crypto_box_PUBLICKEYBYTES));
+  unsigned char *buffer = malloc(cb_len + num_layers*onion_box_PERLAYERBUFFERBYTES);
   assert(!onion_box(ciphertext,
                     buffer,
-                    interior_plaintext,
-                    interior_plaintext_length,
+                    secret,
+                    secret_length,
                     addresses,
                     address_length,
                     num_layers,

@@ -98,42 +98,52 @@ def AnnounceTransformation(data, words, y, color = 'k'):
              bbox=dict(boxstyle=stylename, fc="w", ec=color))
 
 address_len = 19
-auth_overhead = 16
-publickeybytes = 32
-layer_overhead = address_len + auth_overhead + publickeybytes
 secret_length = 7
+
+publickeybytes = 32
 num_layers = 3
-zerobytes_difference = 16
+zerobytes = 32
+boxzerobytes = 16
+auth_overhead = zerobytes - boxzerobytes
 
-transmitted_length = secret_length + auth_overhead + (num_layers-1)*layer_overhead
-cb_length = zerobytes_difference + transmitted_length + layer_overhead
+layer_overhead = address_len + auth_overhead + publickeybytes
+encrypted_length = secret_length + auth_overhead + (num_layers-1)*layer_overhead
+cb_length = boxzerobytes + encrypted_length + layer_overhead
 
-data = [Datum('', zerobytes_difference + (num_layers+1)*layer_overhead + (secret_length-address_len-publickeybytes), 0, ['g'])]
+assert(cb_length == secret_length + zerobytes + num_layers*layer_overhead)
+
+data = [Datum('', boxzerobytes + (num_layers+1)*layer_overhead + (secret_length-address_len-publickeybytes), 0, ['g'])]
 
 y0 = 0
 dely = 7
 gapy = 4*dely
 
 ytop = dely-gapy
-ybottom = -num_layers*4*gapy - dely
+ybottom0 = -num_layers*4*gapy - dely
+ybottom1 = -num_layers*4*gapy - 2.5*dely
+ybottom2 = -num_layers*4*gapy - 4*dely
 
-plt.plot([zerobytes_difference, zerobytes_difference],
-         [ytop, ybottom-dely], 'k:')
-plt.plot([zerobytes_difference + transmitted_length, zerobytes_difference + transmitted_length],
-         [ytop, ybottom-dely], 'k:')
+plt.plot([boxzerobytes, boxzerobytes],
+         [ytop, ybottom1], 'k:')
+plt.plot([boxzerobytes + encrypted_length, boxzerobytes + encrypted_length],
+         [ytop, ybottom2], 'k:')
+plt.plot([-16, -16],
+         [ytop, ybottom2], 'k:')
 
 plt.plot([0, 0],
-         [ytop, ybottom], 'r:')
+         [ytop, ybottom0], 'r:')
 plt.plot([cb_length, cb_length],
-         [ytop, ybottom], 'r:')
+         [ytop, ybottom0], 'r:')
 
 def annotate_dim(xyfrom,xyto,text):
     plt.annotate("",xyfrom,xyto,arrowprops=dict(arrowstyle='<->'))
-    plt.text(cb_length/2,(xyto[1]+xyfrom[1])/2,text,fontsize=10,
+    plt.text((xyto[0]+xyfrom[0])/2,(xyto[1]+xyfrom[1])/2,text,fontsize=10,
              ha='center', va='center',
              bbox=dict(boxstyle='square', fc="w", ec='w'))
-annotate_dim([0, ybottom], [cb_length, ybottom], 'crypto_box length')
-annotate_dim([zerobytes_difference, ybottom-dely], [zerobytes_difference+transmitted_length, ybottom-dely], 'transmitted length')
+annotate_dim([0, ybottom0], [cb_length, ybottom0], 'crypto_box length')
+annotate_dim([boxzerobytes, ybottom1], [boxzerobytes+encrypted_length, ybottom1], 'encrypted length')
+annotate_dim([-16, ybottom2],
+             [boxzerobytes+encrypted_length, ybottom2], 'transmitted length')
 
 for i in range(num_layers):
     if i > 0:
@@ -151,9 +161,9 @@ for i in range(num_layers):
 
 # Here we insert the secret information!
 AnnounceTransformation(data, 'Insert secret!', y0 - gapy/2 + dely/2)
-data = [Datum(r'$0\cdots$', zerobytes_difference + auth_overhead, 0, ['g']),
-        Datum('$S$', secret_length, zerobytes_difference + auth_overhead,
-              ['k'])] + CutData(data, zerobytes_difference+auth_overhead+secret_length)
+data = [Datum(r'$0\cdots$', boxzerobytes + auth_overhead, 0, ['g']),
+        Datum('$S$', secret_length, boxzerobytes + auth_overhead,
+              ['k'])] + CutData(data, boxzerobytes+auth_overhead+secret_length)
 y0 -= gapy
 for d in data:
     d.rectangle(y0, y0+dely)
@@ -169,9 +179,9 @@ for i in range(num_layers-1,-1,-1):
         break
 
     AnnounceTransformation(data, 'Shift right and add data', y0 - gapy/2 + dely/2)
-    data = [Datum(r'$0\cdots$', zerobytes_difference + auth_overhead, 0, ['c']),
-            Datum(r'$a_%d$' % i, address_len, zerobytes_difference+auth_overhead, ['k']),
-            Datum(r'$P_%d$' % i, publickeybytes, zerobytes_difference+auth_overhead+address_len,
+    data = [Datum(r'$0\cdots$', boxzerobytes + auth_overhead, 0, ['c']),
+            Datum(r'$a_%d$' % i, address_len, boxzerobytes+auth_overhead, ['k']),
+            Datum(r'$P_%d$' % i, publickeybytes, boxzerobytes+auth_overhead+address_len,
                   ['k'])] + ShiftRight(data, layer_overhead)[1:]
     y0 -= gapy
     for d in data:

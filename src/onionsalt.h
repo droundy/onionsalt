@@ -3,8 +3,9 @@
 
 #include "tweetnacl.h"
 
-#define onion_box_LAYEROVERHEADBYTES (crypto_box_ZEROBYTES - crypto_box_BOXZEROBYTES \
-                                      + crypto_box_PUBLICKEYBYTES)
+#define onion_box_AUTHENTICATIONBYTES (crypto_box_ZEROBYTES - crypto_box_BOXZEROBYTES)
+
+#define onion_box_LAYEROVERHEADBYTES (onion_box_AUTHENTICATIONBYTES + crypto_box_PUBLICKEYBYTES)
 
 #define onion_box_PERLAYERBUFFERBYTES (onion_box_LAYEROVERHEADBYTES + crypto_box_SECRETKEYBYTES + crypto_box_PUBLICKEYBYTES)
 
@@ -73,8 +74,7 @@ ciphertext[length]
 length
 
     is the length of the two buffers, which should be
-    crypto_box_BOXZEROBYTES + address_label_length longer than the
-    transmitted message was.
+    address_label_length longer than the transmitted message was.
 
 address_label_length
 
