@@ -113,7 +113,7 @@ y0 = 0
 dely = 7
 gapy = 4*dely
 
-ytop = 2*dely-gapy
+ytop = dely-gapy
 ybottom = -num_layers*4*gapy - dely
 
 plt.plot([16, 16],
