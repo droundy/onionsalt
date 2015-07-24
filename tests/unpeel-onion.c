@@ -55,6 +55,7 @@ int main() {
                            cb_len,
                            address_length,
                            secret_keys + i*crypto_box_SECRETKEYBYTES));
+    assert(!memcmp(addresses + i*address_length, myplain + crypto_box_ZEROBYTES, address_length));
   }
 
   return 0;
