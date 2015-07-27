@@ -13,11 +13,11 @@ with open('testing-flags/test.c', 'w') as f:
 
 # add , '-fprofile-arcs', '-ftest-coverage' to both of the following
 # lines in order to enable gcov coverage testing
-optional_flags = ['-Wall', '-Werror']
-optional_linkflags = ['-lprofiler']
+optional_flags = ['-flto', '-Wall', '-Werror']
+optional_linkflags = ['-flto', '-lprofiler']
 
-possible_flags = ['-std=c11', '-std=c99', '-flto', '-O2', '-g']
-possible_linkflags = ['-flto', '-O2', '-g']
+possible_flags = ['-std=c11', '-std=c99', '-O2', '-g']
+possible_linkflags = ['-O2', '-g']
 
 if os.getenv('MINIMAL') == None:
     print('# We are not minimal')
@@ -35,9 +35,9 @@ else:
     print('# We are minimal')
     possible_flags.remove('-std=c11')
     cc = os.getenv('CC', 'oopsies')
-    config = {'cc': os.getenv('CC', '${CC-gcc}'),
-              'flags': [os.getenv('CFLAGS', '${CFLAGS-} -Ibigbro')],
-              'linkflags': [os.getenv('LDFLAGS', '${LDFLAGS-} -Lbigbro')],
+    config = {'cc': os.getenv('CC', 'gcc'),
+              'flags': [os.getenv('CFLAGS', '${CFLAGS}')],
+              'linkflags': [os.getenv('LDFLAGS', '${LDFLAGS}')],
               'os': platform.system().lower(),
               'arch': platform.machine()}
 

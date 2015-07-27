@@ -16,9 +16,12 @@ class bcolors:
 # this ensures that when fac calls git it already has index prepared:
 system('git status')
 
-if system('fac'):
-    print 'Build failed!'
-    exit(1)
+if not system('MINIMAL=true fac --makefile=Makefile'):
+    system('fac')
+else:
+    if system('make'):
+        print 'Build failed!'
+        exit(1)
 
 numpassed = 0
 numfailed = 0
