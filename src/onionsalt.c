@@ -2,7 +2,6 @@
 
 #include <assert.h>
 #include <string.h>
-#include <stdio.h>
 
 extern int onion_box(unsigned char *ciphertext,
                      unsigned char *buffer,
@@ -37,7 +36,7 @@ extern int onion_box(unsigned char *ciphertext,
     crypto_box_keypair(my_public_keys + i*crypto_box_PUBLICKEYBYTES,
                        my_secret_keys + i*crypto_box_SECRETKEYBYTES);
   }
-  unsigned char *plaintext = buffer + num_layers*onion_box_PERLAYERBUFFERBYTES;
+  unsigned char *plaintext = buffer + num_layers*(crypto_box_PUBLICKEYBYTES + crypto_box_SECRETKEYBYTES);
 
   memset(ciphertext, 0, cb_length);
   memset(plaintext, 0, cb_length);
@@ -64,34 +63,29 @@ extern int onion_box(unsigned char *ciphertext,
     } else {
       memcpy(plaintext + crypto_box_ZEROBYTES, addresses + i*address_length, address_length);
       memcpy(plaintext + crypto_box_ZEROBYTES + address_length,
-             my_public_keys + i*crypto_box_PUBLICKEYBYTES, crypto_box_PUBLICKEYBYTES);
+             my_public_keys + (i+1)*crypto_box_PUBLICKEYBYTES, crypto_box_PUBLICKEYBYTES);
     }
     /* Now we encrypt the plaintext, which expands it just a tad. */
     int retval = crypto_box(ciphertext, plaintext, cb_length, nonce,
                             their_public_keys + i*crypto_box_PUBLICKEYBYTES,
                             my_secret_keys+i*crypto_box_SECRETKEYBYTES);
     if (retval) return retval;
+
     for (long long j=cb_length - layer_overhead; j<cb_length; j++) {
       assert(!ciphertext[j]);
     }
     if (i == 0) break;
     /* Now shift things to the right to make room for the next
        address and public key. */
-    memcpy(plaintext + crypto_box_BOXZEROBYTES + layer_overhead,
-           ciphertext + crypto_box_BOXZEROBYTES,
-           cb_length - crypto_box_BOXZEROBYTES - layer_overhead);
-    /* Finally, we just need to copy our public key into the gap we left. */
-    memcpy(plaintext + crypto_box_ZEROBYTES,
-           my_public_keys + i*crypto_box_PUBLICKEYBYTES,
-           crypto_box_PUBLICKEYBYTES);
+    memcpy(plaintext + layer_overhead,
+           ciphertext,
+           cb_length - layer_overhead);
     memset(plaintext, 0, crypto_box_ZEROBYTES);
   }
   memmove(ciphertext + onion_box_AUTHENTICATIONBYTES,
           ciphertext,
           cb_length - layer_overhead);
   memcpy(ciphertext, my_public_keys, crypto_box_PUBLICKEYBYTES);
-  printf("cb_length is %lld, layer_overhead is %lld\n", cb_length, layer_overhead);
-
   memset(buffer, 0, cb_length + num_layers*onion_box_PERLAYERBUFFERBYTES);
 
   return 0;
@@ -103,8 +97,9 @@ int onion_box_open(unsigned char *plaintext,
                    unsigned long long address_length,
                    const unsigned char *secret_key) {
   const long long layer_overhead = address_length + onion_box_LAYEROVERHEADBYTES;
+  const long long encrypted_length = cb_length - crypto_box_BOXZEROBYTES - layer_overhead;
+  const long long transmitted_length = encrypted_length + crypto_box_PUBLICKEYBYTES;
 
-  printf("cb_length is %lld, layer_overhead is %lld\n", cb_length, layer_overhead);
   /* first rescue the public key */
   unsigned char public_key[crypto_box_PUBLICKEYBYTES];
   memcpy(public_key, ciphertext, crypto_box_PUBLICKEYBYTES);
@@ -121,5 +116,10 @@ int onion_box_open(unsigned char *plaintext,
      key for encryption */
   unsigned char nonce[crypto_box_NONCEBYTES] = {0};
 
-  return crypto_box_open(plaintext, ciphertext, cb_length, nonce, public_key, secret_key);
+  int retval = crypto_box_open(plaintext, ciphertext, cb_length, nonce, public_key, secret_key);
+  if (retval) return retval;
+
+  memmove(plaintext, plaintext + crypto_box_ZEROBYTES, transmitted_length + address_length);
+  memset(plaintext+transmitted_length + address_length, 0, cb_length - transmitted_length - address_length);
+  return retval;
 }

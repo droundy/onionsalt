@@ -6,6 +6,7 @@
 
 void randombytes(unsigned char * ptr,unsigned int length)
 {
+  if (length == 0) return; /* No data was requested! */
 	char failed = 0;
 #ifdef WIN32
 	static HCRYPTPROV prov = 0;

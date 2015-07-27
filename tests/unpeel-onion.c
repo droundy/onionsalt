@@ -15,12 +15,12 @@ int main() {
 	unsigned char pk[crypto_box_PUBLICKEYBYTES];
 	assert(!crypto_box_keypair(pk, sk));
 
-  const int secret_length = 137;
+  const int secret_length = 17;
   unsigned char *secret = malloc(secret_length);
 	randombytes(secret, secret_length);
 
   const int num_layers = 5;
-  const int address_length = 30;
+  const int address_length = 51;
   unsigned char *addresses = malloc(address_length*(num_layers-1));
   randombytes(addresses, address_length*(num_layers-1));
 
@@ -48,14 +48,21 @@ int main() {
   unsigned char *mycipher = malloc(cb_len);
   memcpy(mycipher, ciphertext, cb_len);
   unsigned char *myplain = malloc(cb_len);
-  for (int i=0;i<1;i++) {
+  for (int i=0;i<num_layers;i++) {
     printf("Attempting to unpeel layer %d\n", i);
     assert(!onion_box_open(myplain,
                            mycipher,
                            cb_len,
                            address_length,
                            secret_keys + i*crypto_box_SECRETKEYBYTES));
-    assert(!memcmp(addresses + i*address_length, myplain + crypto_box_ZEROBYTES, address_length));
+    if (i < num_layers-1) {
+      assert(!memcmp(addresses + i*address_length, myplain, address_length));
+      memset(mycipher, 0, cb_len);
+      memcpy(mycipher, myplain + address_length, cb_len - layer_overhead+16);
+    } else {
+      assert(!memcmp(secret, myplain, secret_length));
+    }
+    printf("Unpeel worked!!!\n");
   }
 
   return 0;
