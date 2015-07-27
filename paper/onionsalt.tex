@@ -1,6 +1,7 @@
 \documentclass[letterpaper,twocolumn,amsmath,amssymb,pre,aps,10pt]{revtex4-1}
 
 \usepackage{graphicx}
+\usepackage{listings}
 
 \begin{document}
 
@@ -293,5 +294,19 @@ valuable for low-bandwidth anonymous communications.
 %% anonymity~\cite{dingledine2006anonymity}.
 
 \bibliography{onionsalt}% Produces the bibliography via BibTeX.
+
+\appendix
+
+\begin{widetext}
+
+\section{onionsalt.h}
+
+\lstinputlisting[language=C]{../src/onionsalt.h}
+
+\section{onionsalt.c}
+
+\lstinputlisting[language=C]{../src/onionsalt.c}
+
+\end{widetext}
 
 \end{document}

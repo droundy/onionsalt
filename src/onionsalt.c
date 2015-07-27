@@ -17,26 +17,29 @@ extern int onion_box(unsigned char *ciphertext,
   /* layer_overhead is the amount of space needed for each additional
      layer.  This ends up being equal to the amount of zero padding
      that we have to add to the end. */
-  const long long layer_overhead = address_length + onion_box_LAYEROVERHEADBYTES;
+  const long long layer_overhead =
+    address_length + onion_box_LAYEROVERHEADBYTES;
   /* message_length is the length of the transmitted message. */
-  const long long encrypted_length = secret_length + onion_box_AUTHENTICATIONBYTES + (num_layers-1)*layer_overhead;
+  const long long encrypted_length =
+    secret_length + onion_box_AUTHENTICATIONBYTES
+                  + (num_layers-1)*layer_overhead;
   /* cb_length is the length that we always pass to crypto_box.  It
      corresponds to encrypted_length plus one layer_overhead (filled
-     with zeros at the end) plus crypto_box_ZEROBYTES, which we pad at
-     the beginning, minus crypto_box_PUBLICKEYBYTES, since we do not
-     encrypt the public key (which would defeat the purpose of
-     including it). */
-  const long long cb_length = crypto_box_BOXZEROBYTES + encrypted_length + layer_overhead;
+     with zeros at the end) plus crypto_box_BOXZEROBYTES. */
+  const long long cb_length =
+    crypto_box_BOXZEROBYTES + encrypted_length + layer_overhead;
 
   /* Here we split up the buffer into three sections: my_public_keys,
      my_private_keys, and plaintext. */
   unsigned char *my_public_keys = buffer;
-  unsigned char *my_secret_keys = my_public_keys + num_layers*crypto_box_PUBLICKEYBYTES;
+  unsigned char *my_secret_keys =
+    my_public_keys + num_layers*crypto_box_PUBLICKEYBYTES;
   for (int i=0;i<num_layers;i++) {
     crypto_box_keypair(my_public_keys + i*crypto_box_PUBLICKEYBYTES,
                        my_secret_keys + i*crypto_box_SECRETKEYBYTES);
   }
-  unsigned char *plaintext = buffer + num_layers*(crypto_box_PUBLICKEYBYTES + crypto_box_SECRETKEYBYTES);
+  unsigned char *plaintext = buffer
+    + num_layers*(crypto_box_PUBLICKEYBYTES+crypto_box_SECRETKEYBYTES);
 
   memset(ciphertext, 0, cb_length);
   memset(plaintext, 0, cb_length);
@@ -61,9 +64,11 @@ extern int onion_box(unsigned char *ciphertext,
     if (i == num_layers-1) {
       memcpy(plaintext + crypto_box_ZEROBYTES, secret, secret_length);
     } else {
-      memcpy(plaintext + crypto_box_ZEROBYTES, addresses + i*address_length, address_length);
+      memcpy(plaintext + crypto_box_ZEROBYTES, addresses + i*address_length,
+             address_length);
       memcpy(plaintext + crypto_box_ZEROBYTES + address_length,
-             my_public_keys + (i+1)*crypto_box_PUBLICKEYBYTES, crypto_box_PUBLICKEYBYTES);
+             my_public_keys
+             + (i+1)*crypto_box_PUBLICKEYBYTES, crypto_box_PUBLICKEYBYTES);
     }
     /* Now we encrypt the plaintext, which expands it just a tad. */
     int retval = crypto_box(ciphertext, plaintext, cb_length, nonce,
@@ -96,9 +101,12 @@ int onion_box_open(unsigned char *plaintext,
                    unsigned long long cb_length,
                    unsigned long long address_length,
                    const unsigned char *secret_key) {
-  const long long layer_overhead = address_length + onion_box_LAYEROVERHEADBYTES;
-  const long long encrypted_length = cb_length - crypto_box_BOXZEROBYTES - layer_overhead;
-  const long long transmitted_length = encrypted_length + crypto_box_PUBLICKEYBYTES;
+  const long long layer_overhead =
+    address_length + onion_box_LAYEROVERHEADBYTES;
+  const long long encrypted_length =
+    cb_length - crypto_box_BOXZEROBYTES - layer_overhead;
+  const long long transmitted_length =
+    encrypted_length + crypto_box_PUBLICKEYBYTES;
 
   /* first rescue the public key */
   unsigned char public_key[crypto_box_PUBLICKEYBYTES];
@@ -116,10 +124,11 @@ int onion_box_open(unsigned char *plaintext,
      key for encryption */
   unsigned char nonce[crypto_box_NONCEBYTES] = {0};
 
-  int retval = crypto_box_open(plaintext, ciphertext, cb_length, nonce, public_key, secret_key);
-  if (retval) return retval;
-
-  memmove(plaintext, plaintext + crypto_box_ZEROBYTES, transmitted_length + address_length);
-  memset(plaintext+transmitted_length + address_length, 0, cb_length - transmitted_length - address_length);
+  int retval = crypto_box_open(plaintext, ciphertext,
+                               cb_length, nonce, public_key, secret_key);
+  memmove(plaintext, plaintext + crypto_box_ZEROBYTES,
+          transmitted_length + address_length);
+  memset(plaintext+transmitted_length + address_length, 0,
+         cb_length - transmitted_length - address_length);
   return retval;
 }
