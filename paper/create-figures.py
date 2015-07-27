@@ -68,6 +68,12 @@ def EncryptData(data, i):
     for d in data[2:]:
         d.encrypt(colorcycle[i])
     return data
+def DecryptData(data, i):
+    data = CutData(data, 16 + auth_overhead)
+    data = [Datum(r'$0\cdots$', zerobytes, 0, ['c'])] + data
+    for d in data[1:]:
+        d.encrypt(colorcycle[i])
+    return data
 
 def ShiftLeftAndPad(data, shift):
     newd = []
@@ -88,7 +94,7 @@ def ShiftRight(data, shift):
         d.offset += shift
     return data[:-1]
 
-def AnnounceTransformation(data, words, y, color = 'k'):
+def AnnounceTransformation(data, words, y, color = 'k', transformno = None):
     width = sum([d.size for d in data])
     stylename = 'rarrow'
     plt.text(width/2, y, words, rotation=0,
@@ -96,6 +102,11 @@ def AnnounceTransformation(data, words, y, color = 'k'):
              size = 8,
              horizontalalignment='center', verticalalignment='center',
              bbox=dict(boxstyle=stylename, fc="w", ec=color))
+    if transformno != None:
+        plt.text(-8, y, transformno, rotation=0,
+                 size = 10,
+                 horizontalalignment='center', verticalalignment='center',
+                 bbox=dict(boxstyle='circle', fc="w", ec='k'))
 
 address_len = 19
 secret_length = 7
@@ -146,22 +157,26 @@ annotate_dim([boxzerobytes, ybottom1], [boxzerobytes+encrypted_length, ybottom1]
 annotate_dim([-16, ybottom2],
              [-16 + transmitted_length, ybottom2], 'transmitted length')
 
+N = 0
 for i in range(num_layers):
     if i > 0:
-        AnnounceTransformation(data, 'Shift left and pad', y0 - gapy/2 + dely/2)
+        AnnounceTransformation(data, 'Shift left and pad', y0 - gapy/2 + dely/2, transformno=N)
+        N += 1
     data = ShiftLeftAndPad(data, layer_overhead)
     y0 -= gapy
     for d in data:
         d.rectangle(y0, y0+dely)
 
-    AnnounceTransformation(data, 'Encrypt %d' % i, y0 - gapy/2 + dely/2, colorcycle[i])
+    AnnounceTransformation(data, 'Encrypt %d' % i, y0 - gapy/2 + dely/2, colorcycle[i], transformno=N)
+    N += 1
     data = EncryptData(data, i)
     y0 -= gapy
     for d in data:
         d.rectangle(y0, y0+dely)
 
 # Here we insert the secret information!
-AnnounceTransformation(data, 'Insert secret!', y0 - gapy/2 + dely/2)
+AnnounceTransformation(data, 'Insert secret!', y0 - gapy/2 + dely/2, transformno=N)
+N+=1
 data = [Datum(r'$0\cdots$', boxzerobytes + auth_overhead, 0, ['g']),
         Datum('$S$', secret_length, boxzerobytes + auth_overhead,
               ['k'])] + CutData(data, boxzerobytes+auth_overhead+secret_length)
@@ -170,7 +185,8 @@ for d in data:
     d.rectangle(y0, y0+dely)
 
 for i in range(num_layers-1,-1,-1):
-    AnnounceTransformation(data, 'Encrypt %d' % i, y0 - gapy/2 + dely/2, colorcycle[i])
+    AnnounceTransformation(data, 'Encrypt %d' % i, y0 - gapy/2 + dely/2, colorcycle[i], transformno=N)
+    N+=1
     data = EncryptData(data, i)
     y0 -= gapy
     for d in data:
@@ -179,7 +195,8 @@ for i in range(num_layers-1,-1,-1):
     if i == 0:
         break
 
-    AnnounceTransformation(data, 'Shift right and add data', y0 - gapy/2 + dely/2)
+    AnnounceTransformation(data, 'Shift right and add data', y0 - gapy/2 + dely/2, transformno=N)
+    N+=1
     data = [Datum(r'$0\cdots$', boxzerobytes + auth_overhead, 0, ['c']),
             Datum(r'$a_%d$' % i, address_len, boxzerobytes+auth_overhead, ['k']),
             Datum(r'$P_%d$' % i, publickeybytes, boxzerobytes+auth_overhead+address_len,
@@ -193,4 +210,76 @@ plt.axis('off')
 
 plt.tight_layout()
 
-plt.savefig('onion-encryption.pdf')
+plt.savefig('onion-encryption.pdf', transparent=True)
+
+
+plt.figure(figsize=(8,5))
+
+y0 = 0
+dely = 7
+gapy = 4*dely
+
+ytop = dely-gapy
+ybottom0 = -4*gapy - dely
+ybottom1 = ybottom0 - 1.5*dely
+ybottom2 = ybottom1 - 1.5*dely
+
+plt.plot([boxzerobytes, boxzerobytes],
+         [ytop, ybottom1], 'k:')
+plt.plot([boxzerobytes + encrypted_length, boxzerobytes + encrypted_length],
+         [ytop, ybottom2], 'k:')
+plt.plot([-16, -16],
+         [ytop, ybottom2], 'k:')
+
+plt.plot([0, 0],
+         [ytop, ybottom0], 'r:')
+plt.plot([cb_length, cb_length],
+         [ytop, ybottom0], 'r:')
+
+annotate_dim([0, ybottom0], [cb_length, ybottom0], 'crypto_box length')
+annotate_dim([boxzerobytes, ybottom1], [boxzerobytes+encrypted_length, ybottom1], 'encrypted length')
+annotate_dim([-16, ybottom2],
+             [-16 + transmitted_length, ybottom2], 'transmitted length')
+
+data = [Datum('$P_i$', publickeybytes, -16, ['k'])]
+data += [Datum('$A_i$', auth_overhead, 16, ['r','k'])]
+data += [Datum('$a_i$', address_len, 16 + auth_overhead, ['r','k'])]
+data += [Datum('$P_{i+1}$', publickeybytes, 16 + auth_overhead + address_len, ['r','k'])]
+data += [Datum('$M_{i+1}$', encrypted_length - layer_overhead, layer_overhead + 16, ['r','b','k'])]
+y0 -= gapy
+for d in data:
+    d.rectangle(y0, y0+dely)
+
+N = 1
+data = [Datum(r'$0\cdots$', 16, 0, ['c'])] + data[1:]
+data = AppendDatum(data, r'$0\cdots$', layer_overhead, 'c')
+AnnounceTransformation(data, 'Pad left and right', y0 - gapy/2 + dely/2, transformno=N)
+y0 -= gapy
+for d in data:
+    d.rectangle(y0, y0+dely)
+
+N += 1
+AnnounceTransformation(data, 'Decrypt from $P_i$', y0 - gapy/2 + dely/2, transformno=N)
+
+data = DecryptData(data, 0)
+y0 -= gapy
+for d in data:
+    d.rectangle(y0, y0+dely)
+
+N += 1
+AnnounceTransformation(data, 'Truncate for nested message', y0 - gapy/2 + dely/2, transformno=N)
+
+data = data[2:]
+for d in data:
+    d.offset -= layer_overhead
+y0 -= gapy
+for d in data:
+    d.rectangle(y0, y0+dely)
+
+
+plt.axes().set_aspect('equal')
+plt.axis('off')
+
+plt.tight_layout()
+
+plt.savefig('onion-decryption.pdf', transparent=True)

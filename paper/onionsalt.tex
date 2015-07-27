@@ -9,39 +9,288 @@
 \affiliation{Department of Physics, Oregon State University, Corvallis, OR 97331}
 
 \begin{abstract}
-  In this paper, we introduce a layered ``onion'' encryption scheme
+  In this paper, I introduce a layered ``onion'' encryption scheme
   based on the NaCl library.  The onion salt protocol uses unmodified
-  NaCl decryption for each layer, with zero padding in the plain text
-  to ensure that the agent decrypting a given layer has no means to
-  determine either how many layers remain or the size of the interior
-  message.  As in the standard NaCl unbox function, each agent
-  removing a layer of encryption can authenticate that the message was
-  not modified in transit.  In order to acheive this we do some clever
-  tricks.
+  NaCl decryption for each layer, a padding scheme that ensures that
+  no intermediate agent can determine their own position in the
+  sequence.  Nevertheless, each agent is able to ensure that the
+  message was transmitted without modification, as in the standard
+  NaCl \verb!crypto_box_open! function.  I achieve this result by
+  padding the \emph{ciphertext} with zeros during each decryption,
+  with the resulting plaintext providing the expansion needed at the
+  next level.
 \end{abstract}
 
 \maketitle
 
-Tarzan is a low-latency peer-to-peer anonymizing layer that acts at
-the IP level~\cite{freedman2002tarzan}.  The second-generation Tor
-router uses a telescaping connection-based encryption
-scheme~\cite{dingledine2004tor} rather than the ``onion-based'' system
-of the original onion routing~\cite{reed1998onionrouting}.  Note that
-the latter paper (the old one) is actually a very nice
-read~\cite{reed1998onionrouting}.  Aqua is an interesting and recent
-high-bandwidth anonymizing network~\cite{leblond2013towards}.
+Onion routing was introduced in the nineties as a means to enable
+anonymity over the network~\cite{reed1998onionrouting}.  Since then
+Tor has moved from a system using self-contained onions, to a
+telescoping set of channels~\cite{dingledine2004tor}.  Nevertheless, I
+see value in a cryptographic primitive that enables the secure
+construction of cryptographic onions to enable anonymizing routing of
+short messages without the latency introduced by handshakes with each
+intermediate router, and without that state be shared between the
+routers and the sender.  By requiring multiple packets sent back and
+forth, besides increasing latency, the use of sequential handshakes
+introduces opportunities for traffic analysis attacks.  The use of
+shared state introduces an additional per-connection cost to each
+router, as well as the possibility of denial of service (DOS) attacks
+in which an attacker opens numerous connections.
 
-Here is a nice paper to read on distributed hash tables and security
-considerations involved~\cite{sit2002security}.  And here is a nice
-one about how you need a critical mass in order to ensure
-anonymity~\cite{dingledine2006anonymity}.
+\newcommand\Nrouter{\ensuremath{N_{\text{router}}}}
+
+\section{Properties of onion salt}
+
+I introduce in this paper the \emph{onion salt} encryption scheme,
+which uses the Networking and Cryptography library
+(NaCl)~\cite{bernstein2009cryptography} for its grunt work.  This
+protocol creates an onion that is encrypted to $\Nrouter$ ``routers,''
+and 1 ``friend.''  The onion contains plaintext designated for each
+party: routing information for each router, and a secret message for
+the friend.  The original onion can only be decrypted by the first
+router, who thus obtains its routing information and a message
+designated for the next router.  The process continues until the
+friend receives the secret message.  The onion salt encryption scheme
+has the following properties.
+\begin{description}
+\item[Secrecy] No eavesdropper without access to a given recipient's
+  secret key may determine the plaintext intended for that recipient,
+  even after intercepting the message received by each router and the
+  friend.
+\item[Authenticity] Each recipient can determine that the message
+  received was not modified in any way.
+\item[Anonymity] No recipient can determine from the content of the
+  message they received the identity of any other party involved,
+  except for the routing information they may have been provided.  Of
+  course, they most likely will also be able to identify who sent them
+  the message by examining the transport used.
+\item[Ordering ambiguity] No recipient other than the friend can determine
+  their place in the sequence of onion layers.  This last poses the
+  challenge that motivates this work.  The previous three properties
+  can be achieved simply by nesting NaCl encryption.  However, that
+  would make each message larger than the previous one, making it easy
+  for routers to establish a relative ordering between their messages.
+\end{description}
+In the following paragraphs I will explain the relevance of each of
+these properties.
+
+\emph{Secrecy} and \emph{authenticity}are at the core of any secure
+communication scheme.  These are the two properties provided by the
+NaCl \verb!crypto_box! function which we use. The authenticity
+property eliminates any potential attackes that involve cleverly
+modifying an intercepted message (e.g. flipping a few specific bits)
+and observing the resulting behavior of its recipient, and ultimately
+compromising the secrecy of the message.
+
+The \emph{anonymity} of the sender is primarily ensured by generating
+random key pairs for each recipient and transmitting the generated
+public key along with the message.  Because each key pair is used only
+once, although an eavesdropper can extract the public key from each
+message, that information cannot be correlated with the sender.  In
+addition, because each key pair is only used once, a fixed nonce may
+be safely used.  Naturally, the secrecy of each recipient's message is
+also necessary in order to ensure the sender's anonymity.  Also note
+that my definition of anonymity explicitly made no claim regarding
+traffic analysis attacks.  Naturally, if a user's threat model
+includes an observer of network patterns, then additional care care
+(e.g. batching or random delays in transmission) should be used to
+protect against traffic analysis attacks.
 
 \begin{figure*}
   \begin{center}
-    \includegraphics[width=\textwidth]{onion-encryption}
+    \vspace{-6em}
+    \includegraphics[width=\textwidth]{onion-decryption}
+    \vspace{-9em}
   \end{center}
-  \caption{A diagram of the encryption process.}
+  \caption{A diagram of the decryption process removing one layer of
+    the onion.  The steps are labelled by numbers in circles along the
+    left-hand side. Blocks of memory are represented by rectangles,
+    and as those blocks are encrypted they are given nested colored
+    layers corresponding to each encryption applied.  In step 1, the
+    message is padded with zeros on right and left.  In step 2, the
+    message is decrypted, which at the same time encrypts the zero
+    padding at the end.  Finally, once the routing information $a_i$
+    is read, the message is truncated to the same size as the original
+    message, and is ready to be passed on.}\label{fig:decryption}
 \end{figure*}
+
+Finally, \emph{ordering ambiguity} while not strictly necessary,
+provides an additional measure of protection of anonymity in the
+presence of malicious routers.  Simple padding with random data would
+provide a limited ordering ambiguity that could prevent a network
+observer from determining ordering.  However, traffic analysis by
+compromised nodes could operate far more effectively when the ordering
+of messages can be determined or estimated, easily eliminating half of
+the false positives.  In the extreme case---where latency and ordering
+are precisely known---a compromise of the first and last router in the
+sequence could effectively remove the anonymity of a message.  This
+property presents a challenge, because each router must believe that
+the entire onion is consists of actual uncompromised data.  The
+solution is clearly that each router must pad the data it sends on
+with pseudorandom padding that is known to the original sender, but
+not knowable to any other party.  Then the sender can create
+authentication data for each recipient that authenticates not only the
+actual importand content, but also the padding.
+
+\section{The decryption algorithm}
+
+I will begin with the decryption algorithm, illustrated in
+Fig.~\ref{fig:decryption}, which is much simpler than encryption.
+Decryption consists of just three steps.
+\begin{enumerate}
+\item First the public key (which
+  occupies the first 32 bytes) is removed from the message.  The message
+  is then padded at the beginning with 16 bytes of zeros (as required by
+  \verb!crypto_box_open!), and at the end with 48 bytes plus the size of
+  the routing information.
+\item The padded message is passed to the NaCl function
+  \verb!crypto_box_open! with a zero nonce, which decrypts and
+  authenticates the message, in the process encrypting the zero
+  padding at the end.  We note that in practice we use the TweetNaCl
+  implementation, for simplicity of
+  building~\cite{bernstein2014tweetnacl}.
+\item Finally, the routing information is read and stripped off,
+  leaving a message of the same size as the original, padded with
+  pseudorandom data.
+\end{enumerate}
+One unusual feature of this scheme is the the \emph{ciphertext} is
+padded prior to decryption and authentication.  This enables the
+simple use of the NaCl decryption routine, which simultaneously
+decrypts the message authenticates it, and pads it with pseudorandom
+data.
+
+\begin{figure*}
+  \begin{center}
+    \vspace{-3em}
+    \includegraphics[width=\textwidth]{onion-encryption}
+    \vspace{-10em}
+  \end{center}
+  \caption{A diagram of the encryption process, for a three-layer
+    onion.  The steps are labelled by numbers in circles along the
+    left-hand side. Blocks of memory are represented by rectangles,
+    and as those blocks are encrypted they are given nested colored
+    layers corresponding to each encryption applied.  Steps 0-4
+    construct the padding needed for the innermost encryption, the
+    core of the onion.  Step 5 inserts the secret information into the
+    core.  Steps 6-10 encrypt that content in layers, along with
+    routing information (the addresses $a_i$) at each outer layer of
+    the onion.  In addiiton, session public keys $P_i$ are included
+    along with the ciphertext sent to each recipient.  Finally, I
+    note the authentication data $A_i$ at each level, which is the
+    final contribution to the space overhead introduced with each
+    layer.}\label{fig:algorithm}
+\end{figure*}
+
+\section{The encryption algorithm}
+
+The first step in creating an onion salt is to generate one emphemeral
+key pair for each recipient.  These keys will be used for each
+encryption.  A cartoon of the algorithm is shown in
+Fig.~\ref{fig:algorithm}.  The encryption process is naturally more
+complicated than decryption, since it must deal with all layers.  The
+encryption proceeds in two stages.  First, the padding is constructed,
+and then the plaintext for all the recipients is inserted and
+encrypted.  The first stage consists of the following steps, starting
+with a message full of zeros.
+\begin{enumerate}
+\item Zero-pad the message on the right with 48 bytes plus the size of
+  the routing information, as in the decryption, and shift the entire
+  message to the left by the same amount to maintain its length.
+\item Encrypt the resulting plaintext to the next recipient.
+\item Repeat this process once for each recipient, including the
+  friend.
+\end{enumerate}
+Once we have generated the padding, we need to insert the plaintext
+content (the secret message and the routing information) and encrypt.
+This process involves:
+\begin{enumerate}
+\item Insert the plaintext secret message.
+\item The message (including the zero padding at the end) is then
+  encrypted to the recipient of the currently-constructed message.  If
+  no mistakes have been made, this encryption will result in zeros at
+  the end of the message, which naturally will not be transmitted.
+\item Shift the data to the right to eliminate the zeros, and then add
+  the plaintext content consisting of the routing information for the
+  next recipient and the ephemeral public key that recipient will use
+  when decrypting.
+\item Return to step 2, if there is another router.
+\end{enumerate}
+As in the case of decryption, the NaCl \texttt{crypto\_box} encryption
+routine requires zero padding at the beginning of the message as well
+as at the end, introducing a bit more bookkeeping.
+
+\section{Analysis}
+
+Most of the security properties claimed for onion salt derive from
+those of the NaCl \texttt{crypto\_box} function (secrecy and
+authentication), and from the generation of new random key pairs for
+each recipient (anonymity).  The ordering ambiguity derives from the
+padding scheme.  There are, however, a few features of this scheme
+that bear examination lest they violate the preconditions needed for
+NaCl to provide the desired secrecy and authentication.
+
+One such feature is the use of a zero nonce.  I believe this is safe
+because we only use each key pair to send a single message.
+
+The primary risk that I see in this scheme is in whether the choice of
+padding could introduce a flaw in the encryption properties.  In
+particular, we encrypt twice with the same key pair and nonce, which
+has the potential for danger when using stream ciphers.  However, the
+only bytes that are encrypted twice which we use are those that were
+originally zero.  The recipient of padded bytes generated using this
+encryption gains the same knowledge about our stream cipher that an
+opponent would gain using a known-plaintext attack.  Because I believe
+the Salsa20 stream cipher is resistent to known-plaintext attacks, I
+also believe that there should not be an exploit that can take
+advantage of the nature of this padding.
+
+Another question is that of timing attacks.  NaCl itself is
+constructed to be resistant to such attacks, because branches never
+depend on secret data, and array indexing never depends on secret
+data.  A timing attack on the creation of an onion could certainly
+reveal how many layers it has, and possibly some information about the
+slowness of the random byte generator, but should not reveal any more
+information.  Decryption of a single layer by a router should happen
+in fixed time, independent of the data involved, and thus should be
+resistant to timing attacks.  Of course, the timing of the actual
+routing process will likely be very dependent on the secret content,
+but that must be addressed at a different level of the protocol.
+
+\section{Cost}
+
+The cost to create an onion approximately twice the cost to encrypt an
+equal-sized message to each recipient.  A more efficient
+implementation would avoid generating the authentication codes while
+preparing the padding, and would only generate the shared symmetric
+key once.  These optimizations will not affect the resistence to
+timing attacks, and can safely be left for a later improvement.
+
+\section{Conclusions}
+
+I have introduced a new encryption protocol, onion salt, which creates
+a nested sequence of encryptions suitable for onion-style routing of
+fixed-size packets without handshake or prior shared secrets.  This
+protocol has the properties of secrecy, authentication of each layer,
+anonymity, and order ambiguity.  The latter means that routers are
+unable to determine their position in the sequence.  The cost of this
+order ambiguity is in padding of data, as well as increasing the
+amount of data that need be encrypted.  I believe this scheme could be
+valuable for low-bandwidth anonymous communications.
+
+%% Tarzan is a low-latency peer-to-peer anonymizing layer that acts at
+%% the IP level~\cite{freedman2002tarzan}.  The second-generation Tor
+%% router uses a telescaping connection-based encryption
+%% scheme~\cite{dingledine2004tor} rather than the ``onion-based'' system
+%% of the original onion routing~\cite{reed1998onionrouting}.  Note that
+%% the latter paper (the old one) is actually a very nice
+%% read~\cite{reed1998onionrouting}.  Aqua is an interesting and recent
+%% high-bandwidth anonymizing network~\cite{leblond2013towards}.
+
+%% Here is a nice paper to read on distributed hash tables and security
+%% considerations involved~\cite{sit2002security}.  And here is a nice
+%% one about how you need a critical mass in order to ensure
+%% anonymity~\cite{dingledine2006anonymity}.
 
 \bibliography{onionsalt}% Produces the bibliography via BibTeX.
 
