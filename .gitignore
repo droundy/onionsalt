@@ -10,3 +10,5 @@
 *.o
 *.test
 .fac
+*.lock
+target

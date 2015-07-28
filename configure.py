@@ -3,6 +3,17 @@
 from __future__ import print_function
 import string, os, sys, platform
 
+if os.getenv('MINIMAL') == None and not os.system('echo -n "# " && cargo --version'):
+    print('# Cargo works!')
+    print('| cargo build')
+    print('c ~')
+    print('c .log')
+    print('c .tum')
+    print('c .test')
+    print()
+else:
+    print('# Cargo does not work.  :(')
+
 os.system('rm -rf testing-flags')
 os.mkdir('testing-flags');
 with open('testing-flags/test.c', 'w') as f:
