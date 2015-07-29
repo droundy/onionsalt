@@ -81,6 +81,11 @@ def pluralize(num, noun):
             return str(num)+' '+noun+'es'
         return str(num)+' '+noun+'s'
 
+if system('cargo test'):
+    numfailed += 1
+else:
+    numpassed += 1
+
 print
 if numfailed:
     print bcolors.FAIL+'Failed', str(numfailed)+'/'+str(numfailed+numpassed)+bcolors.ENDC
