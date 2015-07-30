@@ -203,10 +203,16 @@ pub mod tweetnacl {
         crypto_stream_salsa20_xor(c,&[],d,n,k)
     }
 
-    pub fn crypto_stream(c: &mut[u8], d: u64, n: &[u8], k: &[u8])
-                         -> Result<(), NaClError> {
+    // crypto_stream_32 is a modified version of crypto_stream, which
+    // always has a fixed length of 32, and returns its output.  We
+    // don't need an actual crypto_stream, since it is only used once
+    // in tweetnacl.
+    pub fn crypto_stream_32(n: &[u8], k: &[u8])
+                            -> Result<[u8; 32], NaClError> {
         let s = try!(crypto_core_hsalsa20(n,k,SIGMA));
-        crypto_stream_salsa20(c,d,&n[16..],&s)
+        let mut c: [u8; 32] = [0; 32];
+        try!(crypto_stream_salsa20(&mut c,32,&n[16..],&s));
+        Ok(c)
     }
 
     pub fn crypto_stream_xor(c: &mut[u8], m: &[u8], d: u64, n: &[u8], k: &[u8])
@@ -330,9 +336,28 @@ pub mod tweetnacl {
         for i in 0..16 {
             c[i] = 0;
         }
+        // The following loop is additional overhead beyond what the C
+        // version of the code does, which results from my choice to
+        // use a return array rather than a mut slice argument for
+        // "core" above.
         for i in 16..32 {
             c[16+i] = h[i];
         }
         Ok(())
     }
+
+    fn crypto_secretbox_open(m: &mut[u8], c: &[u8], d: u64, n: &[u8], k: &[u8])
+                             -> Result<(), NaClError> {
+        if d < 32 {
+            return Err(NaClError::InvalidInput);
+        }
+        let x = try!(crypto_stream_32(n,k));
+        try!(crypto_onetimeauth_verify(&c[16..],&c[32..],d - 32,&x));
+        try!(crypto_stream_xor(m,c,d,n,k));
+        for i in 0..32 {
+            m[i] = 0;
+        }
+        Ok(())
+    }
+
 }
