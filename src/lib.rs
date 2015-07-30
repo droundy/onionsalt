@@ -326,7 +326,7 @@ pub mod tweetnacl {
         crypto_verify_16(h,&x)
     }
 
-    fn crypto_secretbox(c: &mut[u8], m: &[u8], d: u64, n: &[u8], k: &[u8])
+    pub fn crypto_secretbox(c: &mut[u8], m: &[u8], d: u64, n: &[u8], k: &[u8])
                         -> Result<(), NaClError> {
         if d < 32 {
             return Err(NaClError::InvalidInput);
@@ -346,7 +346,7 @@ pub mod tweetnacl {
         Ok(())
     }
 
-    fn crypto_secretbox_open(m: &mut[u8], c: &[u8], d: u64, n: &[u8], k: &[u8])
+    pub fn crypto_secretbox_open(m: &mut[u8], c: &[u8], d: u64, n: &[u8], k: &[u8])
                              -> Result<(), NaClError> {
         if d < 32 {
             return Err(NaClError::InvalidInput);
@@ -357,6 +357,189 @@ pub mod tweetnacl {
         for i in 0..32 {
             m[i] = 0;
         }
+        Ok(())
+    }
+
+    // FIXME the following should be eliminated, since assignment
+    // between arrays is permitted in rust.  For now I'm leaving it to
+    // ease translation of C code.
+    fn set25519(r: &mut GF, a: &GF) {
+        *r = *a;
+    }
+
+    fn car25519(o: &mut GF) {
+        for i in 0..16 {
+            o[i] += 1<<16;
+            let c: i64 = o[i]>>16;
+            let iis15 = if i == 15 {1} else {0};
+            let ilt15 = if i < 15 {1} else {0};
+            o[(i+1)*ilt15] += c-1+37*(c-1)*iis15;
+            o[i] -= c<<16;
+        }
+    }
+
+    fn sel25519(p: &mut GF, q: &mut GF, b: i64) {
+        let c = !(b-1);
+        for i in 0..16 {
+            let t= c&(p[i]^q[i]);
+            p[i]^=t;
+            q[i]^=t;
+        }
+    }
+
+    fn pack25519(o: &mut[u8], n: &GF) {
+        let mut t = *n;
+        car25519(&mut t);
+        car25519(&mut t);
+        car25519(&mut t);
+        let mut m = [0; 16];
+        for _ in 0..1 {
+            m[0]=t[0]-0xffed;
+            for i in 1..15 {
+                m[i]=t[i]-0xffff-((m[i-1]>>16)&1);
+                m[i-1]&=0xffff;
+            }
+            m[15]=t[15]-0x7fff-((m[14]>>16)&1);
+            let b=(m[15]>>16)&1;
+            m[14]&=0xffff;
+            sel25519(&mut t,&mut m,1-b);
+        }
+        for i in 0..16 {
+            o[2*i]= (t[i]&0xff) as u8;
+            o[2*i+1]= (t[i]>>8) as u8;
+        }
+    }
+
+    fn neq25519(a: &GF, b: &GF) -> Result<(), NaClError> {
+        let mut c: [u8; 32] = [0; 32];
+        let mut d: [u8; 32] = [0; 32];
+        pack25519(&mut c,a);
+        pack25519(&mut d,b);
+        crypto_verify_32(&c,&d)
+    }
+
+    fn par25519(a: &GF) -> u8 {
+        let mut d: [u8; 32] = [0; 32];
+        pack25519(&mut d,a);
+        d[0]&1
+    }
+
+    fn unpack25519(n: &[u8]) -> GF {
+        let mut o = GF0;
+        for i in 0..16 {
+            o[i]=n[2*i] as i64 + ((n[2*i+1] as i64) << 8);
+        }
+        o[15]&=0x7fff;
+        o
+    }
+
+    fn A(a: &GF, b: &GF) -> GF {
+        let mut out: GF = *a;
+        for i in 0..16 {
+            out[i] += b[i];
+        }
+        out
+    }
+
+    fn Z(a: &GF, b: &GF) -> GF {
+        let mut out: GF = *a;
+        for i in 0..16 {
+            out[i] -= b[i];
+        }
+        out
+    }
+
+    fn M(a: &GF, b: &GF) -> GF {
+        let mut o: GF = *a;
+        let mut t: [i64; 31] = [0; 31];
+        for i in 0..16 {
+            for j in 0..16 {
+                t[i+j] += a[i]*b[j];
+            }
+        }
+        for i in 0..15 {
+            t[i]+=38*t[i+16];
+        }
+        for i in 0..16 {
+            o[i]=t[i];
+        }
+        car25519(&mut o);
+        car25519(&mut o);
+        o
+    }
+
+    fn S(a: &GF) -> GF {
+        M(a,a)
+    }
+
+    fn inv25519(i: &GF) -> GF {
+        let mut c = *i;
+        for a in (0..254).rev() {
+            c = S(&c);
+            if a!=2 && a!=4 {
+                c = M(&c,i)
+            }
+        }
+        c
+    }
+
+    fn pow2523(i: &GF) -> GF {
+        let mut c = *i;
+        for a in (0..251).rev() {
+            c = S(&c);
+            if a != 1 {
+                c = M(&c, i);
+            }
+        }
+        c
+    }
+
+    fn crypto_scalarmult(q: &mut[u8], n: &[u8], p: &[u8]) -> Result<(), NaClError> {
+        let mut z: [u8; 32] = [0; 32];
+        for i in 0..31 {
+            z[i] = n[i];
+        }
+        z[31]=(n[31]&127)|64;
+        z[0]&=248;
+        let mut x: [GF; 5] = [unpack25519(p), [0;16], [0;16], [0;16], [0;16]];
+        let mut b = x[0];
+        let mut d = GF0;
+        let mut a = GF0;
+        let mut c = GF0;
+        a[0]=1;
+        d[0]=1;
+        for i in (0..255).rev() {
+            let r: i64 = ((z[i>>3]>>(i&7))&1) as i64;
+            sel25519(&mut a, &mut b,r);
+            sel25519(&mut c, &mut d,r);
+            let mut e = A(&a,&c);
+            a = Z(&a,&c);
+            c = A(&b,&d);
+            b = Z(&b,&d);
+            d = S(&e);
+            let mut f = S(&a);
+            a = M(&c,&a);
+            c = M(&b,&e);
+            e = A(&a,&c);
+            a = Z(&a,&c);
+            b = S(&a);
+            c = Z(&d,&f);
+            a = M(&c,&_121665);
+            a = A(&a,&d);
+            c = M(&c,&a);
+            a = M(&d,&f);
+            d = M(&b,&x[0]);
+            b = S(&e);
+            sel25519(&mut a, &mut b,r);
+            sel25519(&mut c, &mut d,r);
+        }
+        x[1] = a;
+        x[2] = c;
+        x[3] = b;
+        x[4] = d;
+        x[2] = inv25519(&x[2]);
+        x[1] = M(&x[1],&x[2]);
+        pack25519(q,&x[1]);
         Ok(())
     }
 
