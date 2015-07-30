@@ -54,23 +54,28 @@ pub mod tweetnacl {
         }
     }
 
-    fn vn(x: &[u8], y: &[u8], n: usize) -> i32 {
+    fn vn(x: &[u8], y: &[u8], n: usize) -> Result<(), NaClError> {
         let mut d: u32 = 0;
         for i in 0..n {
             d |= (x[i]^y[i]) as u32;
         }
-        (1 & ((d - 1) >> 8)) as i32 - 1
+        if (1 & ((d - 1) >> 8)) as i32 - 1 != 0 {
+            Err(NaClError::AuthFailed)
+        } else {
+            Ok(())
+        }
     }
 
-    fn crypto_verify_16(x: &[u8], y: &[u8]) -> i32 {
+    fn crypto_verify_16(x: &[u8], y: &[u8]) -> Result<(), NaClError> {
         vn(x,y,16)
     }
 
-    fn crypto_verify_32(x: &[u8], y: &[u8]) -> i32 {
+    fn crypto_verify_32(x: &[u8], y: &[u8]) -> Result<(), NaClError> {
         vn(x,y,32)
     }
 
-    fn core(out: &mut[u8], inp: &[u8], k: &[u8], c: &[u8], h: bool) {
+    fn core(inp: &[u8], k: &[u8], c: &[u8], h: bool)
+            -> Result<[u8; 64], NaClError> {
         let mut x: [u32; 16] = [0; 16];
         for i in 0..4 {
             x[5*i] = ld32(&c[4*i..]);
@@ -104,6 +109,7 @@ pub mod tweetnacl {
             }
         }
 
+        let mut out: [u8; 64] = [0; 64];
         if h {
             for i in 0..16 {
                 x[i] += y[i];
@@ -121,34 +127,35 @@ pub mod tweetnacl {
                 st32(&mut out[4 * i..],x[i] + y[i]);
             }
         }
+        Ok(out)
     }
 
-    fn crypto_core_salsa20(out: &mut[u8], inp: &[u8], k: &[u8], c: &[u8]) -> i32 {
-        core(out,inp,k,c,false);
-        0
+    fn crypto_core_salsa20(inp: &[u8], k: &[u8], c: &[u8])
+                           -> Result<[u8; 64], NaClError> {
+        core(inp,k,c,false)
     }
 
-    fn crypto_core_hsalsa20(out: &mut[u8], inp: &[u8], k: &[u8], c: &[u8]) -> i32 {
-        core(out,inp,k,c,true);
-        0
+    fn crypto_core_hsalsa20(inp: &[u8], k: &[u8], c: &[u8])
+                            -> Result<[u8; 64], NaClError> {
+        core(inp,k,c,true)
     }
 
     static SIGMA: &'static [u8; 16] = b"expand 32-byte k";
 
     fn crypto_stream_salsa20_xor(c: &mut[u8], m_input: &[u8], mut b: u64,
-                                 n: &[u8], k: &[u8]) -> i32 {
+                                 n: &[u8], k: &[u8])
+                                 -> Result<(), NaClError> {
         let mut m_offset: usize = 0;
         if b == 0 {
-            return 0;
+            return Err(NaClError::InvalidInput);
         }
         let mut z: [u8; 16] = [0; 16];
         for i in 0..8 {
             z[i] = n[i];
         }
-        let mut x: [u8; 64] = [0; 64];
         let mut c_offset: usize = 0;
         while b >= 64 {
-            crypto_core_salsa20(&mut x,&z,k,SIGMA);
+            let x = try!(crypto_core_salsa20(&z,k,SIGMA));
             for i in 0..64 {
                 // The following is really ugly.  I wish I could
                 // define this closure just once and have it used
@@ -182,28 +189,29 @@ pub mod tweetnacl {
             }
         };
         if b != 0 {
-            crypto_core_salsa20(&mut x,&z,k,SIGMA);
+            let x = try!(crypto_core_salsa20(&z,k,SIGMA));
             for i in 0..b as usize {
                 c[c_offset + i] = m(i) ^ x[i];
             }
         }
-        0
+        Ok(())
     }
 
 
-    fn crypto_stream_salsa20(c: &mut[u8], d: u64, n: &[u8], k: &[u8]) -> i32 {
+    fn crypto_stream_salsa20(c: &mut[u8], d: u64, n: &[u8], k: &[u8])
+                             -> Result<(), NaClError> {
         crypto_stream_salsa20_xor(c,&[],d,n,k)
     }
 
-    pub fn crypto_stream(c: &mut[u8], d: u64, n: &[u8], k: &[u8]) -> i32 {
-        let mut s: [u8; 32] = [0; 32];
-        crypto_core_hsalsa20(&mut s,n,k,SIGMA);
+    pub fn crypto_stream(c: &mut[u8], d: u64, n: &[u8], k: &[u8])
+                         -> Result<(), NaClError> {
+        let s = try!(crypto_core_hsalsa20(n,k,SIGMA));
         crypto_stream_salsa20(c,d,&n[16..],&s)
     }
 
-    pub fn crypto_stream_xor(c: &mut[u8], m: &[u8], d: u64, n: &[u8], k: &[u8]) -> i32 {
-        let mut s: [u8; 32] = [0; 32];
-        crypto_core_hsalsa20(&mut s,n,k,SIGMA);
+    pub fn crypto_stream_xor(c: &mut[u8], m: &[u8], d: u64, n: &[u8], k: &[u8])
+                             -> Result<(), NaClError> {
+        let s = try!(crypto_core_hsalsa20(n,k,SIGMA));
         crypto_stream_salsa20_xor(c,m,d,&n[16..],&s)
     }
 
@@ -218,7 +226,16 @@ pub mod tweetnacl {
 
     static MINUSP: &'static [u32; 17] = &[5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 252];
 
-    fn crypto_onetimeauth(out: &mut[u8], mut m: &[u8], mut n: u64, k: &[u8]) -> i32 {
+    // We derive `Debug` because all types should probably derive `Debug`.
+    // This gives us a reasonable human readable description of `CliError` values.
+    #[derive(Debug)]
+    pub enum NaClError {
+        AuthFailed,
+        InvalidInput,
+    }
+
+    fn crypto_onetimeauth(mut m: &[u8], mut n: u64, k: &[u8])
+                          -> Result<[u8; 16], NaClError> {
         //u32 s,i,j,u,x[17],r[17],h[17],c[17],g[17];
 
         let x: &mut[u32; 17] = &mut [0; 17];
@@ -290,16 +307,32 @@ pub mod tweetnacl {
         }
         c[16] = 0;
         add1305(h,c);
+        let mut out: [u8; 16] = [0; 16];
         for j in 0..16 {
             out[j] = h[j] as u8;
         }
-        0
+        Ok(out)
     }
 
-    pub fn crypto_onetimeauth_verify(h: &[u8], m: &[u8], n: u64, k: &[u8]) -> i32 {
-        let mut x: [u8; 16] = [0; 16];
-        crypto_onetimeauth(&mut x,m,n,k);
+    pub fn crypto_onetimeauth_verify(h: &[u8], m: &[u8], n: u64, k: &[u8])
+                                     -> Result<(), NaClError> {
+        let x = try!(crypto_onetimeauth(m,n,k));
         crypto_verify_16(h,&x)
     }
 
+    fn crypto_secretbox(c: &mut[u8], m: &[u8], d: u64, n: &[u8], k: &[u8])
+                        -> Result<(), NaClError> {
+        if d < 32 {
+            return Err(NaClError::InvalidInput);
+        }
+        try!(crypto_stream_xor(c,m,d,n,k));
+        let h = try!(crypto_onetimeauth(&c[32..],d - 32,c));
+        for i in 0..16 {
+            c[i] = 0;
+        }
+        for i in 16..32 {
+            c[16+i] = h[i];
+        }
+        Ok(())
+    }
 }
