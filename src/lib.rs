@@ -200,7 +200,7 @@ pub mod tweetnacl {
     // always has a fixed length of 32, and returns its output.  We
     // don't need an actual crypto_stream, since it is only used once
     // in tweetnacl.
-    pub fn crypto_stream_32(n: &Nonce, k: &[u8])
+    fn crypto_stream_32(n: &Nonce, k: &[u8])
                             -> Result<[u8; 32], NaClError> {
         let s = crypto_core_hsalsa20(&n.0,k,SIGMA);
         let mut c: [u8; 32] = [0; 32];
@@ -208,7 +208,7 @@ pub mod tweetnacl {
         Ok(c)
     }
 
-    pub fn crypto_stream_xor(c: &mut[u8], m: &[u8], d: u64, n: &Nonce, k: &[u8])
+    fn crypto_stream_xor(c: &mut[u8], m: &[u8], d: u64, n: &Nonce, k: &[u8])
                              -> Result<(), NaClError> {
         let s = crypto_core_hsalsa20(&n.0,k,SIGMA);
         crypto_stream_salsa20_xor(c,m,d,&n.0[16..],&s)
@@ -321,7 +321,7 @@ pub mod tweetnacl {
         Ok(out)
     }
 
-    pub fn crypto_onetimeauth_verify(h: &[u8], m: &[u8], n: u64, k: &[u8])
+    fn crypto_onetimeauth_verify(h: &[u8], m: &[u8], n: u64, k: &[u8])
                                      -> Result<(), NaClError> {
         let x = try!(crypto_onetimeauth(m,n,k));
         crypto_verify_16(h,&x)
@@ -593,6 +593,9 @@ pub mod tweetnacl {
         Ok((PublicKey(pk), SecretKey(sk)))
     }
 
+    /// Securely creates a random nonce.  This function isn't in the
+    /// NaCl, but I feel like it could be very handy, and a random
+    /// nonce from a secure source is often what you want.
     pub fn crypto_random_nonce() -> Result<Nonce, NaClError> {
         let mut rng = try!(OsRng::new());
         let mut n = Nonce([0; 32]);
@@ -622,6 +625,38 @@ pub mod tweetnacl {
         crypto_secretbox_open(m,c,n,k)
     }
 
+    /// Open a message encrypted with `crypto_box`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use std::vec;
+    /// use onionsalt::tweetnacl;
+    /// // of course, in practice, don't use unwrap:  handle the error!
+    /// let (mypublickey, mysecretkey) = tweetnacl::crypto_box_keypair().unwrap();
+    /// let (thypublickey, thysecretkey) = tweetnacl::crypto_box_keypair().unwrap();
+    ///
+    /// let plaintext = b"Friendly message.";
+    /// let mut padded_plaintext: vec::Vec<u8> = vec::Vec::with_capacity(32+plaintext.len());
+    /// for _ in 0..32 { padded_plaintext.push(0); }
+    /// for i in 0..plaintext.len() { padded_plaintext.push(plaintext[i]); }
+    /// let mut ciphertext: vec::Vec<u8> = vec::Vec::with_capacity(padded_plaintext.len());
+    /// for _ in 0..padded_plaintext.len() { ciphertext.push(0); }
+    /// let nonce = tweetnacl::crypto_random_nonce().unwrap();
+    ///
+    /// tweetnacl::crypto_box(&mut ciphertext, &padded_plaintext,
+    ///                       &nonce, &thypublickey, &mysecretkey).unwrap();
+    ///
+    /// let mut decrypted: vec::Vec<u8> = vec::Vec::with_capacity(padded_plaintext.len());
+    /// for _ in 0..ciphertext.len() { decrypted.push(0); }
+    ///
+    /// tweetnacl::crypto_box_open(&mut decrypted, &ciphertext,
+    ///                            &nonce, &mypublickey, &thysecretkey).unwrap();
+    ///
+    /// for i in 0..plaintext.len() {
+    ///     assert!(plaintext[i] == decrypted[i+32]);
+    /// }
+    /// ```
     pub fn crypto_box_open(m: &mut[u8], c: &[u8], n: &Nonce, y: &PublicKey, x: &SecretKey)
                        -> Result<(), NaClError> {
         let k = crypto_box_beforenm(y,x);
