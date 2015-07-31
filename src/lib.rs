@@ -64,11 +64,11 @@ pub mod tweetnacl {
     }
 
     fn vn(x: &[u8], y: &[u8], n: usize) -> Result<(), NaClError> {
-        let mut d: u32 = 0;
+        let mut d: Wrapping<u32> = Wrapping(0);
         for i in 0..n {
-            d |= (x[i]^y[i]) as u32;
+            d = d | Wrapping((x[i]^y[i]) as u32);
         }
-        if (1 & ((d - 1) >> 8)) as i32 - 1 != 0 {
+        if unwrap(Wrapping(1) & ((d - Wrapping(1)) >> 8)) as i32 - 1 != 0 {
             Err(NaClError::AuthFailed)
         } else {
             Ok(())
@@ -162,6 +162,7 @@ pub mod tweetnacl {
         for i in 0..8 {
             z[i] = n[i];
         }
+        println!("hello world A");
         let mut c_offset: usize = 0;
         while b >= 64 {
             let x = try!(crypto_core_salsa20(&z,k,SIGMA));
@@ -171,10 +172,10 @@ pub mod tweetnacl {
                 // throughout.  Also note the ugly duplication of code
                 // below.  :(
                 let m = |i: usize| {
-                    if m_offset + i > m_input.len() {
-                        0
-                    } else {
+                    if m_offset + i < m_input.len() {
                         m_input[m_offset+i]
+                    } else {
+                        0
                     }
                 };
                 c[c_offset + i] = m(i) ^ x[i];
@@ -189,20 +190,26 @@ pub mod tweetnacl {
             c_offset += 64;
             m_offset += 64;
         }
+        println!("hello world B");
 
         let m = |i: usize| {
-            if m_offset + i > m_input.len() {
-                0
-            } else {
+            if m_offset + i < m_input.len() {
                 m_input[m_offset+i]
+            } else {
+                0
             }
         };
+        println!("hello world C");
+
         if b != 0 {
+            println!("hello world C1");
             let x = try!(crypto_core_salsa20(&z,k,SIGMA));
+            println!("hello world C2 with b {} and m_input.len() {}", b, m_input.len());
             for i in 0..b as usize {
                 c[c_offset + i] = m(i) ^ x[i];
             }
         }
+        println!("hello world D");
         Ok(())
     }
 
@@ -218,9 +225,12 @@ pub mod tweetnacl {
     // in tweetnacl.
     pub fn crypto_stream_32(n: &[u8], k: &[u8])
                             -> Result<[u8; 32], NaClError> {
+        println!("about to hsalsa20");
         let s = try!(crypto_core_hsalsa20(n,k,SIGMA));
         let mut c: [u8; 32] = [0; 32];
+        println!("about to salsa20");
         try!(crypto_stream_salsa20(&mut c,32,&n[16..],&s));
+        println!("done with salsa20");
         Ok(c)
     }
 
@@ -367,12 +377,18 @@ pub mod tweetnacl {
         Ok(())
     }
 
-    pub fn crypto_secretbox_open(m: &mut[u8], c: &[u8], d: u64, n: &[u8], k: &[u8])
-                             -> Result<(), NaClError> {
+    pub fn crypto_secretbox_open(m: &mut[u8], c: &[u8], n: &[u8], k: &[u8])
+                                 -> Result<(), NaClError> {
+        let d = c.len() as u64;
+        if m.len() as u64 != d {
+            return Err(NaClError::InvalidInput);
+        }
         if d < 32 {
             return Err(NaClError::InvalidInput);
         }
+        println!("About to crypto_stream_32");
         let x = try!(crypto_stream_32(n,k));
+        println!("About to verify");
         try!(crypto_onetimeauth_verify(&c[16..],&c[32..],d - 32,&x));
         try!(crypto_stream_xor(m,c,d,n,k));
         for i in 0..32 {
@@ -393,6 +409,16 @@ pub mod tweetnacl {
         }
         let nonce: [u8; 32] = [0; 32];
         crypto_secretbox(&mut ciphertext, plaintext, &nonce, secretkey);
+        // There has got to be a better way to allocate an array of
+        // zeros with dynamically determined type.
+        let mut decrypted: vec::Vec<u8> = vec::Vec::with_capacity(plaintext.len());
+        for _ in 0..plaintext.len() {
+            decrypted.push(0);
+        }
+        crypto_secretbox_open(&mut decrypted, &ciphertext, &nonce, secretkey);
+        for i in 0..decrypted.len() {
+            assert!(decrypted[i] == plaintext[i])
+        }
     }
 
     // FIXME the following should be eliminated, since assignment
