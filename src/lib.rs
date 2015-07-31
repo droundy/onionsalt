@@ -1,6 +1,6 @@
 extern crate rand;
 
-pub mod tweetnacl {
+pub mod crypto {
 
     use std::num::Wrapping;
     fn unwrap<T>(x: Wrapping<T>) -> T {
@@ -56,11 +56,11 @@ pub mod tweetnacl {
         }
     }
 
-    fn crypto_verify_16(x: &[u8], y: &[u8]) -> Result<(), NaClError> {
+    fn verify_16(x: &[u8], y: &[u8]) -> Result<(), NaClError> {
         vn(x,y,16)
     }
 
-    // fn crypto_verify_32(x: &[u8], y: &[u8]) -> Result<(), NaClError> {
+    // fn verify_32(x: &[u8], y: &[u8]) -> Result<(), NaClError> {
     //     vn(x,y,32)
     // }
 
@@ -119,11 +119,11 @@ pub mod tweetnacl {
         out
     }
 
-    fn crypto_core_salsa20(inp: &[u8], k: &[u8], c: &[u8]) -> [u8; 64] {
+    fn core_salsa20(inp: &[u8], k: &[u8], c: &[u8]) -> [u8; 64] {
         core(inp,k,c,false)
     }
 
-    fn crypto_core_hsalsa20(n: &[u8], k: &[u8], c: &[u8]) -> [u8; 32] {
+    fn core_hsalsa20(n: &[u8], k: &[u8], c: &[u8]) -> [u8; 32] {
         let x = core(n,k,c,true);
         let mut o: [u8; 32] = [0; 32];
         for i in 0..32 {
@@ -134,7 +134,7 @@ pub mod tweetnacl {
 
     static SIGMA: &'static [u8; 16] = b"expand 32-byte k";
 
-    fn crypto_stream_salsa20_xor(c: &mut[u8], m_input: &[u8], mut b: u64,
+    fn stream_salsa20_xor(c: &mut[u8], m_input: &[u8], mut b: u64,
                                  n: &[u8], k: &[u8])
                                  -> Result<(), NaClError> {
         let mut m_offset: usize = 0;
@@ -147,7 +147,7 @@ pub mod tweetnacl {
         }
         let mut c_offset: usize = 0;
         while b >= 64 {
-            let x = crypto_core_salsa20(&z,k,SIGMA);
+            let x = core_salsa20(&z,k,SIGMA);
             for i in 0..64 {
                 // The following is really ugly.  I wish I could
                 // define this closure just once and have it used
@@ -182,7 +182,7 @@ pub mod tweetnacl {
         };
 
         if b != 0 {
-            let x = crypto_core_salsa20(&z,k,SIGMA);
+            let x = core_salsa20(&z,k,SIGMA);
             for i in 0..b as usize {
                 c[c_offset + i] = m(i) ^ x[i];
             }
@@ -191,27 +191,27 @@ pub mod tweetnacl {
     }
 
 
-    fn crypto_stream_salsa20(c: &mut[u8], d: u64, n: &[u8], k: &[u8])
+    fn stream_salsa20(c: &mut[u8], d: u64, n: &[u8], k: &[u8])
                              -> Result<(), NaClError> {
-        crypto_stream_salsa20_xor(c,&[],d,n,k)
+        stream_salsa20_xor(c,&[],d,n,k)
     }
 
-    // crypto_stream_32 is a modified version of crypto_stream, which
+    // stream_32 is a modified version of crypto_stream, which
     // always has a fixed length of 32, and returns its output.  We
     // don't need an actual crypto_stream, since it is only used once
     // in tweetnacl.
-    fn crypto_stream_32(n: &Nonce, k: &[u8])
+    fn stream_32(n: &Nonce, k: &[u8])
                             -> Result<[u8; 32], NaClError> {
-        let s = crypto_core_hsalsa20(&n.0,k,SIGMA);
+        let s = core_hsalsa20(&n.0,k,SIGMA);
         let mut c: [u8; 32] = [0; 32];
-        try!(crypto_stream_salsa20(&mut c,32,&n.0[16..],&s));
+        try!(stream_salsa20(&mut c,32,&n.0[16..],&s));
         Ok(c)
     }
 
-    fn crypto_stream_xor(c: &mut[u8], m: &[u8], d: u64, n: &Nonce, k: &[u8])
+    fn stream_xor(c: &mut[u8], m: &[u8], d: u64, n: &Nonce, k: &[u8])
                              -> Result<(), NaClError> {
-        let s = crypto_core_hsalsa20(&n.0,k,SIGMA);
-        crypto_stream_salsa20_xor(c,m,d,&n.0[16..],&s)
+        let s = core_hsalsa20(&n.0,k,SIGMA);
+        stream_salsa20_xor(c,m,d,&n.0[16..],&s)
     }
 
     fn add1305(h: &mut[u32], c: &[u32]) {
@@ -241,7 +241,7 @@ pub mod tweetnacl {
         }
     }
 
-    fn crypto_onetimeauth(mut m: &[u8], mut n: u64, k: &[u8])
+    fn onetimeauth(mut m: &[u8], mut n: u64, k: &[u8])
                           -> Result<[u8; 16], NaClError> {
         //u32 s,i,j,u,x[17],r[17],h[17],c[17],g[17];
 
@@ -321,13 +321,13 @@ pub mod tweetnacl {
         Ok(out)
     }
 
-    fn crypto_onetimeauth_verify(h: &[u8], m: &[u8], n: u64, k: &[u8])
+    fn onetimeauth_verify(h: &[u8], m: &[u8], n: u64, k: &[u8])
                                      -> Result<(), NaClError> {
-        let x = try!(crypto_onetimeauth(m,n,k));
-        crypto_verify_16(h,&x)
+        let x = try!(onetimeauth(m,n,k));
+        verify_16(h,&x)
     }
 
-    pub fn crypto_secretbox(c: &mut[u8], m: &[u8], n: &Nonce, k: &[u8])
+    pub fn secretbox(c: &mut[u8], m: &[u8], n: &Nonce, k: &[u8])
                             -> Result<(), NaClError> {
         let d = c.len() as u64;
         if d != m.len() as u64 {
@@ -336,8 +336,8 @@ pub mod tweetnacl {
         if d < 32 {
             return Err(NaClError::InvalidInput);
         }
-        try!(crypto_stream_xor(c,m,d,n,k));
-        let h = try!(crypto_onetimeauth(&c[32..],d - 32,c));
+        try!(stream_xor(c,m,d,n,k));
+        let h = try!(onetimeauth(&c[32..],d - 32,c));
         for i in 0..16 {
             c[i] = 0;
         }
@@ -351,7 +351,7 @@ pub mod tweetnacl {
         Ok(())
     }
 
-    pub fn crypto_secretbox_open(m: &mut[u8], c: &[u8], n: &Nonce, k: &[u8])
+    pub fn secretbox_open(m: &mut[u8], c: &[u8], n: &Nonce, k: &[u8])
                                  -> Result<(), NaClError> {
         let d = c.len() as u64;
         if m.len() as u64 != d {
@@ -360,11 +360,11 @@ pub mod tweetnacl {
         if d < 32 {
             return Err(NaClError::InvalidInput);
         }
-        println!("About to crypto_stream_32");
-        let x = try!(crypto_stream_32(n,k));
+        println!("About to stream_32");
+        let x = try!(stream_32(n,k));
         println!("About to verify");
-        try!(crypto_onetimeauth_verify(&c[16..],&c[32..],d - 32,&x));
-        try!(crypto_stream_xor(m,c,d,n,k));
+        try!(onetimeauth_verify(&c[16..],&c[32..],d - 32,&x));
+        try!(stream_xor(m,c,d,n,k));
         for i in 0..32 {
             m[i] = 0;
         }
@@ -382,14 +382,14 @@ pub mod tweetnacl {
             ciphertext.push(0);
         }
         let nonce = Nonce([0; 32]);
-        crypto_secretbox(&mut ciphertext, plaintext, &nonce, secretkey).unwrap();
+        secretbox(&mut ciphertext, plaintext, &nonce, secretkey).unwrap();
         // There has got to be a better way to allocate an array of
         // zeros with dynamically determined type.
         let mut decrypted: vec::Vec<u8> = vec::Vec::with_capacity(plaintext.len());
         for _ in 0..plaintext.len() {
             decrypted.push(0);
         }
-        crypto_secretbox_open(&mut decrypted, &ciphertext, &nonce, secretkey).unwrap();
+        secretbox_open(&mut decrypted, &ciphertext, &nonce, secretkey).unwrap();
         for i in 0..decrypted.len() {
             assert!(decrypted[i] == plaintext[i])
         }
@@ -443,7 +443,7 @@ pub mod tweetnacl {
     //     let mut d: [u8; 32] = [0; 32];
     //     pack25519(&mut c,a);
     //     pack25519(&mut d,b);
-    //     crypto_verify_32(&c,&d)
+    //     verify_32(&c,&d)
     // }
 
     // fn par25519(a: &GF) -> u8 {
@@ -526,7 +526,7 @@ pub mod tweetnacl {
     //     c
     // }
 
-    fn crypto_scalarmult(q: &mut[u8], n: &[u8], p: &[u8]) {
+    fn scalarmult(q: &mut[u8], n: &[u8], p: &[u8]) {
         let mut z: [u8; 32] = [0; 32];
         for i in 0..31 {
             z[i] = n[i];
@@ -574,8 +574,8 @@ pub mod tweetnacl {
         pack25519(q,&x[1]);
     }
 
-    fn crypto_scalarmult_base(q: &mut[u8], n: &[u8]) {
-        crypto_scalarmult(q,n,&_9)
+    fn scalarmult_base(q: &mut[u8], n: &[u8]) {
+        scalarmult(q,n,&_9)
     }
 
     use rand::{OsRng,Rng};
@@ -584,57 +584,59 @@ pub mod tweetnacl {
     pub struct SecretKey([u8; 32]);
     pub struct Nonce([u8; 32]);
 
-    pub fn crypto_box_keypair() -> Result<(PublicKey, SecretKey), NaClError> {
+    pub fn box_keypair() -> Result<(PublicKey, SecretKey), NaClError> {
         let mut rng = try!(OsRng::new());
         let mut pk: [u8; 32] = [0; 32];
         let mut sk: [u8; 32] = [0; 32];
         rng.fill_bytes(&mut sk);
-        crypto_scalarmult_base(&mut pk, &sk);
+        scalarmult_base(&mut pk, &sk);
         Ok((PublicKey(pk), SecretKey(sk)))
     }
 
     /// Securely creates a random nonce.  This function isn't in the
     /// NaCl, but I feel like it could be very handy, and a random
     /// nonce from a secure source is often what you want.
-    pub fn crypto_random_nonce() -> Result<Nonce, NaClError> {
+    pub fn random_nonce() -> Result<Nonce, NaClError> {
         let mut rng = try!(OsRng::new());
         let mut n = Nonce([0; 32]);
         rng.fill_bytes(&mut n.0);
         Ok(n)
     }
 
-    pub fn crypto_box_beforenm(y: &PublicKey, x: &SecretKey) -> [u8; 32] {
+    pub fn box_beforenm(y: &PublicKey, x: &SecretKey) -> [u8; 32] {
         let mut s: [u8; 32] = [0; 32];
-        crypto_scalarmult(&mut s,&x.0,&y.0);
-        crypto_core_hsalsa20(&_0,&s,SIGMA)
+        scalarmult(&mut s,&x.0,&y.0);
+        core_hsalsa20(&_0,&s,SIGMA)
     }
 
-    pub fn crypto_box_afternm(c: &mut[u8], m: &[u8], n: &Nonce, k: &[u8; 32])
+    pub fn box_afternm(c: &mut[u8], m: &[u8], n: &Nonce, k: &[u8; 32])
                           -> Result<(), NaClError> {
-        crypto_secretbox(c, m, n, k)
+        secretbox(c, m, n, k)
     }
 
-    pub fn crypto_box(c: &mut[u8], m: &[u8], n: &Nonce, y: &PublicKey, x: &SecretKey)
+    /// An implementation of the NaCl function `crypto_box`, renamed
+    /// to `crypto::box_up` because `box` is a keyword in rust.
+    pub fn box_up(c: &mut[u8], m: &[u8], n: &Nonce, y: &PublicKey, x: &SecretKey)
                   -> Result<(), NaClError> {
-        let k = crypto_box_beforenm(y,x);
-        crypto_box_afternm(c, m, n, &k)
+        let k = box_beforenm(y,x);
+        box_afternm(c, m, n, &k)
     }
 
-    pub fn crypto_box_open_afternm(m: &mut[u8], c: &[u8], n: &Nonce, k: &[u8; 32])
+    pub fn box_open_afternm(m: &mut[u8], c: &[u8], n: &Nonce, k: &[u8; 32])
                                -> Result<(), NaClError> {
-        crypto_secretbox_open(m,c,n,k)
+        secretbox_open(m,c,n,k)
     }
 
-    /// Open a message encrypted with `crypto_box`.
+    /// Open a message encrypted with `crypto::box_up`.
     ///
     /// # Examples
     ///
     /// ```
     /// use std::vec;
-    /// use onionsalt::tweetnacl;
+    /// use onionsalt::crypto;
     /// // of course, in practice, don't use unwrap:  handle the error!
-    /// let (mypublickey, mysecretkey) = tweetnacl::crypto_box_keypair().unwrap();
-    /// let (thypublickey, thysecretkey) = tweetnacl::crypto_box_keypair().unwrap();
+    /// let (mypublickey, mysecretkey) = crypto::box_keypair().unwrap();
+    /// let (thypublickey, thysecretkey) = crypto::box_keypair().unwrap();
     ///
     /// let plaintext = b"Friendly message.";
     /// let mut padded_plaintext: vec::Vec<u8> = vec::Vec::with_capacity(32+plaintext.len());
@@ -642,25 +644,25 @@ pub mod tweetnacl {
     /// for i in 0..plaintext.len() { padded_plaintext.push(plaintext[i]); }
     /// let mut ciphertext: vec::Vec<u8> = vec::Vec::with_capacity(padded_plaintext.len());
     /// for _ in 0..padded_plaintext.len() { ciphertext.push(0); }
-    /// let nonce = tweetnacl::crypto_random_nonce().unwrap();
+    /// let nonce = crypto::random_nonce().unwrap();
     ///
-    /// tweetnacl::crypto_box(&mut ciphertext, &padded_plaintext,
+    /// crypto::box_up(&mut ciphertext, &padded_plaintext,
     ///                       &nonce, &thypublickey, &mysecretkey).unwrap();
     ///
     /// let mut decrypted: vec::Vec<u8> = vec::Vec::with_capacity(padded_plaintext.len());
     /// for _ in 0..ciphertext.len() { decrypted.push(0); }
     ///
-    /// tweetnacl::crypto_box_open(&mut decrypted, &ciphertext,
+    /// crypto::box_open(&mut decrypted, &ciphertext,
     ///                            &nonce, &mypublickey, &thysecretkey).unwrap();
     ///
     /// for i in 0..plaintext.len() {
     ///     assert!(plaintext[i] == decrypted[i+32]);
     /// }
     /// ```
-    pub fn crypto_box_open(m: &mut[u8], c: &[u8], n: &Nonce, y: &PublicKey, x: &SecretKey)
+    pub fn box_open(m: &mut[u8], c: &[u8], n: &Nonce, y: &PublicKey, x: &SecretKey)
                        -> Result<(), NaClError> {
-        let k = crypto_box_beforenm(y,x);
-        crypto_box_open_afternm(m, c, n, &k)
+        let k = box_beforenm(y,x);
+        box_open_afternm(m, c, n, &k)
     }
 
     #[test]
@@ -668,34 +670,27 @@ pub mod tweetnacl {
         use std::vec;
 
         let plaintext: &[u8] = b"\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0This is only a test.";
-        let (pk1, sk1) = crypto_box_keypair().unwrap();
-        let (pk2, sk2) = crypto_box_keypair().unwrap();
+        let (pk1, sk1) = box_keypair().unwrap();
+        let (pk2, sk2) = box_keypair().unwrap();
         let mut ciphertext: vec::Vec<u8> = vec![];
         for _ in 0..plaintext.len() {
             ciphertext.push(0);
         }
         let nonce = Nonce([0; 32]);
-        crypto_box(&mut ciphertext, plaintext, &nonce, &pk1, &sk2).unwrap();
+        box_up(&mut ciphertext, plaintext, &nonce, &pk1, &sk2).unwrap();
         // There has got to be a better way to allocate an array of
         // zeros with dynamically determined type.
         let mut decrypted: vec::Vec<u8> = vec::Vec::with_capacity(plaintext.len());
         for _ in 0..plaintext.len() {
             decrypted.push(0);
         }
-        crypto_box_open(&mut decrypted, &ciphertext, &nonce, &pk2, &sk1).unwrap();
+        box_open(&mut decrypted, &ciphertext, &nonce, &pk2, &sk1).unwrap();
         for i in 0..decrypted.len() {
             assert!(decrypted[i] == plaintext[i])
         }
     }
 
-}
-
-pub mod hash {
-    use std::num::Wrapping;
-    fn unwrap<T>(x: Wrapping<T>) -> T {
-        let Wrapping(x) = x;
-        x
-    }
+    // The following code all has to do with implementing sha512.
 
     fn dl64(x: &[u8]) -> Wrapping<u64> {
         let mut u = Wrapping(0 as u64);
@@ -780,7 +775,7 @@ pub mod hash {
         Wrapping(0x4cc5d4becb3e42b6), Wrapping(0x597f299cfc657e2a),
         Wrapping(0x5fcb6fab3ad6faec), Wrapping(0x6c44198c4a475817) ];
 
-    fn crypto_hashblocks(x: &mut[u8], mut m: &[u8], mut n: u64) -> u64 {
+    fn hashblocks(x: &mut[u8], mut m: &[u8], mut n: u64) -> u64 {
         let mut z: [Wrapping<u64>; 8] = [Wrapping(0); 8];
         for i in 0..8 {
             z[i] = dl64(&x[8 * i..]);
@@ -828,11 +823,11 @@ pub mod hash {
                            0x1f,0x83,0xd9,0xab,0xfb,0x41,0xbd,0x6b,
                            0x5b,0xe0,0xcd,0x19,0x13,0x7e,0x21,0x79 ];
 
-    pub fn crypto_hash(mut m: &[u8]) -> [u8; 64] {
+    pub fn hash(mut m: &[u8]) -> [u8; 64] {
         let mut n = m.len();
         let b = Wrapping(n as u64);
         let mut h = IV;
-        crypto_hashblocks(&mut h,m,n as u64);
+        hashblocks(&mut h,m,n as u64);
         let n_old = n;
         n &= 127;
         m = &m[n_old - n..];
@@ -847,7 +842,7 @@ pub mod hash {
         x[n-9] = unwrap(b >> 61) as u8;
         ts64(&mut x[n-8..],b<<3);
 
-        crypto_hashblocks(&mut h,&x,n as u64);
+        hashblocks(&mut h,&x,n as u64);
         h
     }
 
@@ -872,7 +867,7 @@ pub mod hash {
         fn test_hash(content: &[u8], hashval: &[u8]) {
             let c = fromhex(content);
             let hsh = fromhex(hashval);
-            let myhsh = crypto_hash(&c);
+            let myhsh = hash(&c);
             assert!(hsh.len() == myhsh.len());
             println!("");
             for i in 0..myhsh.len() {
