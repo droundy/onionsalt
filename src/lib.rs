@@ -1,6 +1,78 @@
 extern crate rand;
 
 pub mod crypto {
+    //! A rust translation of the TweetNaCl library.  It is mostly a
+    //! direct translation, but in places I tried to make the API more
+    //! rusty.  It has three major features, of which you are likely
+    //! to use only one.
+    //!
+    //! 1. **Authenticated symmetric-key encryption** This is not so
+    //!    very often useful, but on the off chance you have a shared
+    //!    secret you could use it.
+    //!
+    //! 2. **SHA512 hasing** This again could be handy, but is not
+    //!    necesarily what you want most of the time.  And to be
+    //!    honest, you probably don't want my crude translation to
+    //!    rust of the pure C TweetNaCl implementation.
+    //!
+    //! 3. **Public-key encryption with authentication** This is what
+    //!    you want.  It allows you to send messages to a remote
+    //!    party, and ensure they aren't modified in transit.  The
+    //!    remote party can verify that you sent the message (or
+    //!    someone else did who had access to either your private key
+    //!    or *their* private key), but they can't prove that you sent
+    //!    the message.  It's a nice set of functionality, implemented
+    //!    in the functions `box_up` (which encrypts) and `box_open`
+    //!    (which decrypts and authenticates).
+    //!
+    //! # Examples
+    //!
+    //! Here is a simple example of encrypting a message and
+    //! decrypting it.  The one thing that it doesn't demonstrate is
+    //! that the ciphertext is padded with 16 zero bytes, which you
+    //! probably don't want to bother sending over the network.
+    //!
+    //! ```
+    //! # use std::vec;
+    //! # use onionsalt::crypto;
+    //! #
+    //! // of course, in practice, don't use unwrap:  handle the error!
+    //! let (mypublickey, mysecretkey) = crypto::box_keypair().unwrap();
+    //! let (thypublickey, thysecretkey) = crypto::box_keypair().unwrap();
+    //!
+    //! let plaintext = b"Friendly message.";
+    //!
+    //! let mut padded_plaintext: vec::Vec<u8> = vec::Vec::with_capacity(32+plaintext.len());
+    //! for _ in 0..32 { padded_plaintext.push(0); }
+    //! for i in 0..plaintext.len() { padded_plaintext.push(plaintext[i]); }
+    //!
+    //! let mut ciphertext: vec::Vec<u8> = vec::Vec::with_capacity(padded_plaintext.len());
+    //! for _ in 0..padded_plaintext.len() { ciphertext.push(0); }
+    //!
+    //! let nonce = crypto::random_nonce().unwrap();
+    //!
+    //! // Here we encreypt the message.  Keep in mind when sending it
+    //! // that you should strip the 16 zeros off the beginning!
+    //!
+    //! crypto::box_up(&mut ciphertext, &padded_plaintext,
+    //!                &nonce, &thypublickey, &mysecretkey).unwrap();
+    //!
+    //! let mut decrypted: vec::Vec<u8> = vec::Vec::with_capacity(padded_plaintext.len());
+    //! for _ in 0..ciphertext.len() { decrypted.push(0); }
+    //!
+    //! // Use box_open to decrypt the message.  You REALLY don't want
+    //! // to unwrap (or ignore) the output of box_open, since this is
+    //! // how you know that the message was authenticated.
+    //!
+    //! crypto::box_open(&mut decrypted, &ciphertext,
+    //!                  &nonce, &mypublickey, &thysecretkey).unwrap();
+    //!
+    //! // Note that decrypted (like padded_plaintext) has 32 bytes of
+    //! // zeros padded at the beginning.
+    //! for i in 0..plaintext.len() {
+    //!     assert!(plaintext[i] == decrypted[i+32]);
+    //! }
+    //! ```
 
     use std::num::Wrapping;
     fn unwrap<T>(x: Wrapping<T>) -> T {
@@ -227,8 +299,25 @@ pub mod crypto {
 
     use std;
 
-    // We derive `Debug` because all types should probably derive `Debug`.
-    // This gives us a reasonable human readable description of `CliError` values.
+
+    /// The error return type.  You can get errors for only one of three reasons:
+    ///
+    /// 1. You passed in slices that were the wrong sizes.  This is
+    ///    your bug, and we would be justified in panicking for this.
+    ///
+    /// 2. You called an "open" function, and the message failed to
+    ///    authenticate.  This is only a bug if you thought the
+    ///    message should be valid.  But you need to handle this,
+    ///    since presumable some bad person could try to corrupt your
+    ///    data.
+    ///
+    /// 3. If you are generating random data (either generating keys
+    ///    or a nonce), you could in principle encounter an IO error.
+    ///    This should be unusual, but could happen.
+
+    // We derive `Debug` because all types should probably derive
+    // `Debug`.  This gives us a reasonable human readable description
+    // of the `NaClError` values.
     #[derive(Debug)]
     pub enum NaClError {
         AuthFailed,
@@ -240,6 +329,14 @@ pub mod crypto {
             NaClError::IOError(e)
         }
     }
+
+    /// A public key.
+    pub struct PublicKey([u8; 32]);
+    /// A secret key.
+    pub struct SecretKey([u8; 32]);
+    /// A nonce.  You should never reuse a nonce for two different
+    /// messages between the same set of keys.
+    pub struct Nonce([u8; 32]);
 
     fn onetimeauth(mut m: &[u8], mut n: u64, k: &[u8])
                           -> Result<[u8; 16], NaClError> {
@@ -327,6 +424,7 @@ pub mod crypto {
         verify_16(h,&x)
     }
 
+    /// Use symmetric encryption to encrypt a message.
     pub fn secretbox(c: &mut[u8], m: &[u8], n: &Nonce, k: &[u8])
                             -> Result<(), NaClError> {
         let d = c.len() as u64;
@@ -351,6 +449,7 @@ pub mod crypto {
         Ok(())
     }
 
+    /// Decrypt a message encrypted with `secretbox`.
     pub fn secretbox_open(m: &mut[u8], c: &[u8], n: &Nonce, k: &[u8])
                                  -> Result<(), NaClError> {
         let d = c.len() as u64;
@@ -580,10 +679,8 @@ pub mod crypto {
 
     use rand::{OsRng,Rng};
 
-    pub struct PublicKey([u8; 32]);
-    pub struct SecretKey([u8; 32]);
-    pub struct Nonce([u8; 32]);
-
+    /// Generate a random public/secret key pair.  This is the *only*
+    /// way you generate keys.
     pub fn box_keypair() -> Result<(PublicKey, SecretKey), NaClError> {
         let mut rng = try!(OsRng::new());
         let mut pk: [u8; 32] = [0; 32];
@@ -603,12 +700,19 @@ pub mod crypto {
         Ok(n)
     }
 
+    /// Prepare to either open or encrypt some public-key messages.
+    /// This is useful if you want to handle many messages between the
+    /// same two recipients, since it allows you to do the public-key
+    /// business just once.
     pub fn box_beforenm(y: &PublicKey, x: &SecretKey) -> [u8; 32] {
         let mut s: [u8; 32] = [0; 32];
         scalarmult(&mut s,&x.0,&y.0);
         core_hsalsa20(&_0,&s,SIGMA)
     }
 
+    /// Encrypt a message after creating a secret key using
+    /// `box_beforenm`.  The two functions together come out to the
+    /// same thing as `box_up`.
     pub fn box_afternm(c: &mut[u8], m: &[u8], n: &Nonce, k: &[u8; 32])
                           -> Result<(), NaClError> {
         secretbox(c, m, n, k)
@@ -622,6 +726,9 @@ pub mod crypto {
         box_afternm(c, m, n, &k)
     }
 
+    /// Decrypt a message using a key that was precomputed using
+    /// `box_beforenm`.  The two functions together are the same as
+    /// the easier-to-use `box_open`.
     pub fn box_open_afternm(m: &mut[u8], c: &[u8], n: &Nonce, k: &[u8; 32])
                                -> Result<(), NaClError> {
         secretbox_open(m,c,n,k)
@@ -629,36 +736,6 @@ pub mod crypto {
 
     /// Open a message encrypted with `crypto::box_up`.
     ///
-    /// # Examples
-    ///
-    /// ```
-    /// use std::vec;
-    /// use onionsalt::crypto;
-    /// // of course, in practice, don't use unwrap:  handle the error!
-    /// let (mypublickey, mysecretkey) = crypto::box_keypair().unwrap();
-    /// let (thypublickey, thysecretkey) = crypto::box_keypair().unwrap();
-    ///
-    /// let plaintext = b"Friendly message.";
-    /// let mut padded_plaintext: vec::Vec<u8> = vec::Vec::with_capacity(32+plaintext.len());
-    /// for _ in 0..32 { padded_plaintext.push(0); }
-    /// for i in 0..plaintext.len() { padded_plaintext.push(plaintext[i]); }
-    /// let mut ciphertext: vec::Vec<u8> = vec::Vec::with_capacity(padded_plaintext.len());
-    /// for _ in 0..padded_plaintext.len() { ciphertext.push(0); }
-    /// let nonce = crypto::random_nonce().unwrap();
-    ///
-    /// crypto::box_up(&mut ciphertext, &padded_plaintext,
-    ///                       &nonce, &thypublickey, &mysecretkey).unwrap();
-    ///
-    /// let mut decrypted: vec::Vec<u8> = vec::Vec::with_capacity(padded_plaintext.len());
-    /// for _ in 0..ciphertext.len() { decrypted.push(0); }
-    ///
-    /// crypto::box_open(&mut decrypted, &ciphertext,
-    ///                            &nonce, &mypublickey, &thysecretkey).unwrap();
-    ///
-    /// for i in 0..plaintext.len() {
-    ///     assert!(plaintext[i] == decrypted[i+32]);
-    /// }
-    /// ```
     pub fn box_open(m: &mut[u8], c: &[u8], n: &Nonce, y: &PublicKey, x: &SecretKey)
                        -> Result<(), NaClError> {
         let k = box_beforenm(y,x);
@@ -823,6 +900,7 @@ pub mod crypto {
                            0x1f,0x83,0xd9,0xab,0xfb,0x41,0xbd,0x6b,
                            0x5b,0xe0,0xcd,0x19,0x13,0x7e,0x21,0x79 ];
 
+    /// Compute the SHA512 hash of some data.
     pub fn hash(mut m: &[u8]) -> [u8; 64] {
         let mut n = m.len();
         let b = Wrapping(n as u64);
