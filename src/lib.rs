@@ -141,8 +141,13 @@ pub mod tweetnacl {
     }
 
     fn crypto_core_hsalsa20(inp: &[u8], k: &[u8], c: &[u8])
-                            -> Result<[u8; 64], NaClError> {
-        core(inp,k,c,true)
+                            -> Result<[u8; 32], NaClError> {
+        let x = try!(core(inp,k,c,true));
+        let mut o: [u8; 32] = [0; 32];
+        for i in 0..32 {
+            o[i] = x[i];
+        }
+        Ok(o)
     }
 
     static SIGMA: &'static [u8; 16] = b"expand 32-byte k";
@@ -404,14 +409,14 @@ pub mod tweetnacl {
             ciphertext.push(0);
         }
         let nonce: [u8; 32] = [0; 32];
-        crypto_secretbox(&mut ciphertext, plaintext, &nonce, secretkey);
+        crypto_secretbox(&mut ciphertext, plaintext, &nonce, secretkey).unwrap();
         // There has got to be a better way to allocate an array of
         // zeros with dynamically determined type.
         let mut decrypted: vec::Vec<u8> = vec::Vec::with_capacity(plaintext.len());
         for _ in 0..plaintext.len() {
             decrypted.push(0);
         }
-        crypto_secretbox_open(&mut decrypted, &ciphertext, &nonce, secretkey);
+        crypto_secretbox_open(&mut decrypted, &ciphertext, &nonce, secretkey).unwrap();
         for i in 0..decrypted.len() {
             assert!(decrypted[i] == plaintext[i])
         }
@@ -606,8 +611,7 @@ pub mod tweetnacl {
 
     use rand::{OsRng,Rng};
 
-    fn crypto_box_keypair()
-                          -> Result<([u8; 32], [u8; 32]), NaClError> {
+    fn crypto_box_keypair() -> Result<([u8; 32], [u8; 32]), NaClError> {
         let mut rng = try!(OsRng::new());
         let mut x: [u8; 32] = [0; 32];
         let mut y: [u8; 32] = [0; 32];
@@ -616,4 +620,54 @@ pub mod tweetnacl {
         Ok((x, y))
     }
 
+    fn crypto_box_beforenm(y: &[u8; 32], x: &[u8; 32]) -> Result<[u8; 32], NaClError> {
+        let mut s: [u8; 32] = [0; 32];
+        try!(crypto_scalarmult(&mut s,x,y));
+        crypto_core_hsalsa20(&_0,&s,SIGMA)
+    }
+
+    fn crypto_box_afternm(c: &mut[u8], m: &[u8], n: &[u8], k: &[u8; 32])
+                          -> Result<(), NaClError> {
+        crypto_secretbox(c, m, n, k)
+    }
+
+    fn crypto_box(c: &mut[u8], m: &[u8], n: &[u8], y: &[u8; 32], x: &[u8; 32])
+                  -> Result<(), NaClError> {
+        let k = try!(crypto_box_beforenm(y,x));
+        crypto_box_afternm(c, m, n, &k)
+    }
+
+    fn crypto_box_open_afternm(m: &mut[u8], c: &[u8], n: &[u8], k: &[u8; 32])
+                               -> Result<(), NaClError> {
+        crypto_secretbox_open(m,c,n,k)
+    }
+
+    fn crypto_box_open(m: &mut[u8], c: &[u8], n: &[u8], y: &[u8; 32], x: &[u8; 32])
+                       -> Result<(), NaClError> {
+        let k = try!(crypto_box_beforenm(y,x));
+        crypto_box_open_afternm(m, c, n, &k)
+    }
+
+    #[test]
+    fn box_works() {
+        let plaintext: &[u8] = b"\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0This is only a test.";
+        let (sk1, pk1) = crypto_box_keypair().unwrap();
+        let (sk2, pk2) = crypto_box_keypair().unwrap();
+        let mut ciphertext: vec::Vec<u8> = vec![];
+        for _ in 0..plaintext.len() {
+            ciphertext.push(0);
+        }
+        let nonce: [u8; 32] = [0; 32];
+        crypto_box(&mut ciphertext, plaintext, &nonce, &pk1, &sk2).unwrap();
+        // There has got to be a better way to allocate an array of
+        // zeros with dynamically determined type.
+        let mut decrypted: vec::Vec<u8> = vec::Vec::with_capacity(plaintext.len());
+        for _ in 0..plaintext.len() {
+            decrypted.push(0);
+        }
+        crypto_box_open(&mut decrypted, &ciphertext, &nonce, &pk2, &sk1).unwrap();
+        for i in 0..decrypted.len() {
+            assert!(decrypted[i] == plaintext[i])
+        }
+    }
 }
