@@ -1,3 +1,5 @@
+extern crate rand;
+
 pub mod tweetnacl {
 
     #[test]
@@ -232,12 +234,20 @@ pub mod tweetnacl {
 
     static MINUSP: &'static [u32; 17] = &[5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 252];
 
+    use std;
+
     // We derive `Debug` because all types should probably derive `Debug`.
     // This gives us a reasonable human readable description of `CliError` values.
     #[derive(Debug)]
     pub enum NaClError {
         AuthFailed,
         InvalidInput,
+        IOError(std::io::Error),
+    }
+    impl std::convert::From<std::io::Error> for NaClError {
+        fn from(e: std::io::Error) -> NaClError {
+            NaClError::IOError(e)
+        }
     }
 
     fn crypto_onetimeauth(mut m: &[u8], mut n: u64, k: &[u8])
@@ -541,6 +551,22 @@ pub mod tweetnacl {
         x[1] = M(&x[1],&x[2]);
         pack25519(q,&x[1]);
         Ok(())
+    }
+
+    fn crypto_scalarmult_base(q: &mut[u8], n: &[u8]) -> Result<(), NaClError> {
+        crypto_scalarmult(q,n,&_9)
+    }
+
+    use rand::{OsRng,Rng};
+
+    fn crypto_box_keypair()
+                          -> Result<([u8; 32], [u8; 32]), NaClError> {
+        let mut rng = try!(OsRng::new());
+        let mut x: [u8; 32] = [0; 32];
+        let mut y: [u8; 32] = [0; 32];
+        rng.fill_bytes(&mut x);
+        try!(crypto_scalarmult_base(&mut y, &x));
+        Ok((x, y))
     }
 
 }
