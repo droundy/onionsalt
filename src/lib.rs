@@ -611,18 +611,21 @@ pub mod tweetnacl {
 
     use rand::{OsRng,Rng};
 
-    fn crypto_box_keypair() -> Result<([u8; 32], [u8; 32]), NaClError> {
+    struct PublicKey([u8; 32]);
+    struct SecretKey([u8; 32]);
+
+    fn crypto_box_keypair() -> Result<(PublicKey, SecretKey), NaClError> {
         let mut rng = try!(OsRng::new());
-        let mut x: [u8; 32] = [0; 32];
-        let mut y: [u8; 32] = [0; 32];
-        rng.fill_bytes(&mut x);
-        try!(crypto_scalarmult_base(&mut y, &x));
-        Ok((x, y))
+        let mut pk: [u8; 32] = [0; 32];
+        let mut sk: [u8; 32] = [0; 32];
+        rng.fill_bytes(&mut sk);
+        try!(crypto_scalarmult_base(&mut pk, &sk));
+        Ok((PublicKey(pk), SecretKey(sk)))
     }
 
-    fn crypto_box_beforenm(y: &[u8; 32], x: &[u8; 32]) -> Result<[u8; 32], NaClError> {
+    fn crypto_box_beforenm(y: &PublicKey, x: &SecretKey) -> Result<[u8; 32], NaClError> {
         let mut s: [u8; 32] = [0; 32];
-        try!(crypto_scalarmult(&mut s,x,y));
+        try!(crypto_scalarmult(&mut s,&x.0,&y.0));
         crypto_core_hsalsa20(&_0,&s,SIGMA)
     }
 
@@ -631,7 +634,7 @@ pub mod tweetnacl {
         crypto_secretbox(c, m, n, k)
     }
 
-    fn crypto_box(c: &mut[u8], m: &[u8], n: &[u8], y: &[u8; 32], x: &[u8; 32])
+    fn crypto_box(c: &mut[u8], m: &[u8], n: &[u8], y: &PublicKey, x: &SecretKey)
                   -> Result<(), NaClError> {
         let k = try!(crypto_box_beforenm(y,x));
         crypto_box_afternm(c, m, n, &k)
@@ -642,7 +645,7 @@ pub mod tweetnacl {
         crypto_secretbox_open(m,c,n,k)
     }
 
-    fn crypto_box_open(m: &mut[u8], c: &[u8], n: &[u8], y: &[u8; 32], x: &[u8; 32])
+    fn crypto_box_open(m: &mut[u8], c: &[u8], n: &[u8], y: &PublicKey, x: &SecretKey)
                        -> Result<(), NaClError> {
         let k = try!(crypto_box_beforenm(y,x));
         crypto_box_open_afternm(m, c, n, &k)
@@ -651,8 +654,8 @@ pub mod tweetnacl {
     #[test]
     fn box_works() {
         let plaintext: &[u8] = b"\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0This is only a test.";
-        let (sk1, pk1) = crypto_box_keypair().unwrap();
-        let (sk2, pk2) = crypto_box_keypair().unwrap();
+        let (pk1, sk1) = crypto_box_keypair().unwrap();
+        let (pk2, sk2) = crypto_box_keypair().unwrap();
         let mut ciphertext: vec::Vec<u8> = vec![];
         for _ in 0..plaintext.len() {
             ciphertext.push(0);
