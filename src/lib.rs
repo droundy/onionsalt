@@ -140,9 +140,9 @@ pub mod tweetnacl {
         core(inp,k,c,false)
     }
 
-    fn crypto_core_hsalsa20(inp: &[u8], k: &[u8], c: &[u8])
+    fn crypto_core_hsalsa20(n: &[u8], k: &[u8], c: &[u8])
                             -> Result<[u8; 32], NaClError> {
-        let x = try!(core(inp,k,c,true));
+        let x = try!(core(n,k,c,true));
         let mut o: [u8; 32] = [0; 32];
         for i in 0..32 {
             o[i] = x[i];
@@ -224,21 +224,21 @@ pub mod tweetnacl {
     // always has a fixed length of 32, and returns its output.  We
     // don't need an actual crypto_stream, since it is only used once
     // in tweetnacl.
-    pub fn crypto_stream_32(n: &[u8], k: &[u8])
+    pub fn crypto_stream_32(n: &Nonce, k: &[u8])
                             -> Result<[u8; 32], NaClError> {
         println!("about to hsalsa20");
-        let s = try!(crypto_core_hsalsa20(n,k,SIGMA));
+        let s = try!(crypto_core_hsalsa20(&n.0,k,SIGMA));
         let mut c: [u8; 32] = [0; 32];
         println!("about to salsa20");
-        try!(crypto_stream_salsa20(&mut c,32,&n[16..],&s));
+        try!(crypto_stream_salsa20(&mut c,32,&n.0[16..],&s));
         println!("done with salsa20");
         Ok(c)
     }
 
-    pub fn crypto_stream_xor(c: &mut[u8], m: &[u8], d: u64, n: &[u8], k: &[u8])
+    pub fn crypto_stream_xor(c: &mut[u8], m: &[u8], d: u64, n: &Nonce, k: &[u8])
                              -> Result<(), NaClError> {
-        let s = try!(crypto_core_hsalsa20(n,k,SIGMA));
-        crypto_stream_salsa20_xor(c,m,d,&n[16..],&s)
+        let s = try!(crypto_core_hsalsa20(&n.0,k,SIGMA));
+        crypto_stream_salsa20_xor(c,m,d,&n.0[16..],&s)
     }
 
     fn add1305(h: &mut[u32], c: &[u32]) {
@@ -354,7 +354,7 @@ pub mod tweetnacl {
         crypto_verify_16(h,&x)
     }
 
-    pub fn crypto_secretbox(c: &mut[u8], m: &[u8], n: &[u8], k: &[u8])
+    pub fn crypto_secretbox(c: &mut[u8], m: &[u8], n: &Nonce, k: &[u8])
                             -> Result<(), NaClError> {
         let d = c.len() as u64;
         if d != m.len() as u64 {
@@ -378,7 +378,7 @@ pub mod tweetnacl {
         Ok(())
     }
 
-    pub fn crypto_secretbox_open(m: &mut[u8], c: &[u8], n: &[u8], k: &[u8])
+    pub fn crypto_secretbox_open(m: &mut[u8], c: &[u8], n: &Nonce, k: &[u8])
                                  -> Result<(), NaClError> {
         let d = c.len() as u64;
         if m.len() as u64 != d {
@@ -408,7 +408,7 @@ pub mod tweetnacl {
         for _ in 0..plaintext.len() {
             ciphertext.push(0);
         }
-        let nonce: [u8; 32] = [0; 32];
+        let nonce = Nonce([0; 32]);
         crypto_secretbox(&mut ciphertext, plaintext, &nonce, secretkey).unwrap();
         // There has got to be a better way to allocate an array of
         // zeros with dynamically determined type.
@@ -495,6 +495,7 @@ pub mod tweetnacl {
         o
     }
 
+    #[allow(non_snake_case)]
     fn A(a: &GF, b: &GF) -> GF {
         let mut out: GF = *a;
         for i in 0..16 {
@@ -503,6 +504,7 @@ pub mod tweetnacl {
         out
     }
 
+    #[allow(non_snake_case)]
     fn Z(a: &GF, b: &GF) -> GF {
         let mut out: GF = *a;
         for i in 0..16 {
@@ -511,6 +513,7 @@ pub mod tweetnacl {
         out
     }
 
+    #[allow(non_snake_case)]
     fn M(a: &GF, b: &GF) -> GF {
         let mut o: GF = *a;
         let mut t: [i64; 31] = [0; 31];
@@ -530,6 +533,7 @@ pub mod tweetnacl {
         o
     }
 
+    #[allow(non_snake_case)]
     fn S(a: &GF) -> GF {
         M(a,a)
     }
@@ -579,7 +583,7 @@ pub mod tweetnacl {
             c = A(&b,&d);
             b = Z(&b,&d);
             d = S(&e);
-            let mut f = S(&a);
+            let f = S(&a);
             a = M(&c,&a);
             c = M(&b,&e);
             e = A(&a,&c);
@@ -611,10 +615,11 @@ pub mod tweetnacl {
 
     use rand::{OsRng,Rng};
 
-    struct PublicKey([u8; 32]);
-    struct SecretKey([u8; 32]);
+    pub struct PublicKey([u8; 32]);
+    pub struct SecretKey([u8; 32]);
+    pub struct Nonce([u8; 32]);
 
-    fn crypto_box_keypair() -> Result<(PublicKey, SecretKey), NaClError> {
+    pub fn crypto_box_keypair() -> Result<(PublicKey, SecretKey), NaClError> {
         let mut rng = try!(OsRng::new());
         let mut pk: [u8; 32] = [0; 32];
         let mut sk: [u8; 32] = [0; 32];
@@ -623,29 +628,36 @@ pub mod tweetnacl {
         Ok((PublicKey(pk), SecretKey(sk)))
     }
 
-    fn crypto_box_beforenm(y: &PublicKey, x: &SecretKey) -> Result<[u8; 32], NaClError> {
+    pub fn crypto_random_nonce() -> Result<Nonce, NaClError> {
+        let mut rng = try!(OsRng::new());
+        let mut n = Nonce([0; 32]);
+        rng.fill_bytes(&mut n.0);
+        Ok(n)
+    }
+
+    pub fn crypto_box_beforenm(y: &PublicKey, x: &SecretKey) -> Result<[u8; 32], NaClError> {
         let mut s: [u8; 32] = [0; 32];
         try!(crypto_scalarmult(&mut s,&x.0,&y.0));
         crypto_core_hsalsa20(&_0,&s,SIGMA)
     }
 
-    fn crypto_box_afternm(c: &mut[u8], m: &[u8], n: &[u8], k: &[u8; 32])
+    pub fn crypto_box_afternm(c: &mut[u8], m: &[u8], n: &Nonce, k: &[u8; 32])
                           -> Result<(), NaClError> {
         crypto_secretbox(c, m, n, k)
     }
 
-    fn crypto_box(c: &mut[u8], m: &[u8], n: &[u8], y: &PublicKey, x: &SecretKey)
+    pub fn crypto_box(c: &mut[u8], m: &[u8], n: &Nonce, y: &PublicKey, x: &SecretKey)
                   -> Result<(), NaClError> {
         let k = try!(crypto_box_beforenm(y,x));
         crypto_box_afternm(c, m, n, &k)
     }
 
-    fn crypto_box_open_afternm(m: &mut[u8], c: &[u8], n: &[u8], k: &[u8; 32])
+    pub fn crypto_box_open_afternm(m: &mut[u8], c: &[u8], n: &Nonce, k: &[u8; 32])
                                -> Result<(), NaClError> {
         crypto_secretbox_open(m,c,n,k)
     }
 
-    fn crypto_box_open(m: &mut[u8], c: &[u8], n: &[u8], y: &PublicKey, x: &SecretKey)
+    pub fn crypto_box_open(m: &mut[u8], c: &[u8], n: &Nonce, y: &PublicKey, x: &SecretKey)
                        -> Result<(), NaClError> {
         let k = try!(crypto_box_beforenm(y,x));
         crypto_box_open_afternm(m, c, n, &k)
@@ -660,7 +672,7 @@ pub mod tweetnacl {
         for _ in 0..plaintext.len() {
             ciphertext.push(0);
         }
-        let nonce: [u8; 32] = [0; 32];
+        let nonce = Nonce([0; 32]);
         crypto_box(&mut ciphertext, plaintext, &nonce, &pk1, &sk2).unwrap();
         // There has got to be a better way to allocate an array of
         // zeros with dynamically determined type.
