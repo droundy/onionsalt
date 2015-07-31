@@ -5,7 +5,8 @@ import string, os, sys, platform
 
 if os.getenv('MINIMAL') == None and not os.system('echo -n "# " && cargo --version'):
     print('# Cargo works!')
-    print('| cargo build')
+    print('| cargo build && cargo doc && cargo test')
+    print('C ~/.cargo')
     print('c ~')
     print('c .log')
     print('c .tum')
