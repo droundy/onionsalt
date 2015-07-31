@@ -13,18 +13,18 @@ pub mod tweetnacl {
 
     type GF = [i64; 16];
     static GF0: GF = [0; 16];
-    static GF1: GF = [1; 16];
+    // static GF1: GF = [1; 16];
     static _121665: GF = [0xDB41,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1];
-    static D: GF = [0x78a3, 0x1359, 0x4dca, 0x75eb, 0xd8ab, 0x4141, 0x0a4d, 0x0070,
-                    0xe898, 0x7779, 0x4079, 0x8cc7, 0xfe73, 0x2b6f, 0x6cee, 0x5203];
-    static D2: GF = [0xf159, 0x26b2, 0x9b94, 0xebd6, 0xb156, 0x8283, 0x149a, 0x00e0,
-                     0xd130, 0xeef3, 0x80f2, 0x198e, 0xfce7, 0x56df, 0xd9dc, 0x2406];
-    static X: GF = [0xd51a, 0x8f25, 0x2d60, 0xc956, 0xa7b2, 0x9525, 0xc760, 0x692c,
-                    0xdc5c, 0xfdd6, 0xe231, 0xc0a4, 0x53fe, 0xcd6e, 0x36d3, 0x2169];
-    static Y: GF = [0x6658, 0x6666, 0x6666, 0x6666, 0x6666, 0x6666, 0x6666, 0x6666,
-                    0x6666, 0x6666, 0x6666, 0x6666, 0x6666, 0x6666, 0x6666, 0x6666];
-    static I: GF = [0xa0b0, 0x4a0e, 0x1b27, 0xc4ee, 0xe478, 0xad2f, 0x1806, 0x2f43,
-                    0xd7a7, 0x3dfb, 0x0099, 0x2b4d, 0xdf0b, 0x4fc1, 0x2480, 0x2b83];
+    // static D: GF = [0x78a3, 0x1359, 0x4dca, 0x75eb, 0xd8ab, 0x4141, 0x0a4d, 0x0070,
+    //                 0xe898, 0x7779, 0x4079, 0x8cc7, 0xfe73, 0x2b6f, 0x6cee, 0x5203];
+    // static D2: GF = [0xf159, 0x26b2, 0x9b94, 0xebd6, 0xb156, 0x8283, 0x149a, 0x00e0,
+    //                  0xd130, 0xeef3, 0x80f2, 0x198e, 0xfce7, 0x56df, 0xd9dc, 0x2406];
+    // static X: GF = [0xd51a, 0x8f25, 0x2d60, 0xc956, 0xa7b2, 0x9525, 0xc760, 0x692c,
+    //                 0xdc5c, 0xfdd6, 0xe231, 0xc0a4, 0x53fe, 0xcd6e, 0x36d3, 0x2169];
+    // static Y: GF = [0x6658, 0x6666, 0x6666, 0x6666, 0x6666, 0x6666, 0x6666, 0x6666,
+    //                 0x6666, 0x6666, 0x6666, 0x6666, 0x6666, 0x6666, 0x6666, 0x6666];
+    // static I: GF = [0xa0b0, 0x4a0e, 0x1b27, 0xc4ee, 0xe478, 0xad2f, 0x1806, 0x2f43,
+    //                 0xd7a7, 0x3dfb, 0x0099, 0x2b4d, 0xdf0b, 0x4fc1, 0x2480, 0x2b83];
 
     fn l32(x: Wrapping<u32>, c: usize) -> Wrapping<u32> {
         (x << c) | ((x&Wrapping(0xffffffff)) >> (32 - c))
@@ -37,25 +37,10 @@ pub mod tweetnacl {
         (u<<8)|Wrapping(x[0] as u32)
     }
 
-    fn dl64(x: &[u8]) -> u64 {
-        let mut u = Wrapping(0 as u64);
-        for i in 0..8 {
-            u = (u<<8)|Wrapping(x[i] as u64);
-        }
-        let Wrapping(u) = u;
-        u
-    }
-
     fn st32(x: &mut[u8], mut u: Wrapping<u32>) {
         for i in 0..4 {
             x[i] = unwrap(u) as u8;
             u = u >> 8;
-        }
-    }
-
-    fn ts64(x: &mut[u8], mut u: u64) {
-        for i in 0..8 {
-            x[i] = u as u8; u >>= 8;
         }
     }
 
@@ -75,9 +60,9 @@ pub mod tweetnacl {
         vn(x,y,16)
     }
 
-    fn crypto_verify_32(x: &[u8], y: &[u8]) -> Result<(), NaClError> {
-        vn(x,y,32)
-    }
+    // fn crypto_verify_32(x: &[u8], y: &[u8]) -> Result<(), NaClError> {
+    //     vn(x,y,32)
+    // }
 
     fn core(inp: &[u8], k: &[u8], c: &[u8], h: bool)
             -> Result<[u8; 64], NaClError> {
@@ -398,10 +383,10 @@ pub mod tweetnacl {
         Ok(())
     }
 
-    use std::vec;
-
     #[test]
     fn secretbox_works() {
+        use std::vec;
+
         let plaintext: &[u8] = b"\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0This is only a test.";
         let secretkey: &[u8; 32] = b"This is my secret key. It is me.";
         let mut ciphertext: vec::Vec<u8> = vec![];
@@ -420,13 +405,6 @@ pub mod tweetnacl {
         for i in 0..decrypted.len() {
             assert!(decrypted[i] == plaintext[i])
         }
-    }
-
-    // FIXME the following should be eliminated, since assignment
-    // between arrays is permitted in rust.  For now I'm leaving it to
-    // ease translation of C code.
-    fn set25519(r: &mut GF, a: &GF) {
-        *r = *a;
     }
 
     fn car25519(o: &mut GF) {
@@ -472,19 +450,19 @@ pub mod tweetnacl {
         }
     }
 
-    fn neq25519(a: &GF, b: &GF) -> Result<(), NaClError> {
-        let mut c: [u8; 32] = [0; 32];
-        let mut d: [u8; 32] = [0; 32];
-        pack25519(&mut c,a);
-        pack25519(&mut d,b);
-        crypto_verify_32(&c,&d)
-    }
+    // fn neq25519(a: &GF, b: &GF) -> Result<(), NaClError> {
+    //     let mut c: [u8; 32] = [0; 32];
+    //     let mut d: [u8; 32] = [0; 32];
+    //     pack25519(&mut c,a);
+    //     pack25519(&mut d,b);
+    //     crypto_verify_32(&c,&d)
+    // }
 
-    fn par25519(a: &GF) -> u8 {
-        let mut d: [u8; 32] = [0; 32];
-        pack25519(&mut d,a);
-        d[0]&1
-    }
+    // fn par25519(a: &GF) -> u8 {
+    //     let mut d: [u8; 32] = [0; 32];
+    //     pack25519(&mut d,a);
+    //     d[0]&1
+    // }
 
     fn unpack25519(n: &[u8]) -> GF {
         let mut o = GF0;
@@ -549,16 +527,16 @@ pub mod tweetnacl {
         c
     }
 
-    fn pow2523(i: &GF) -> GF {
-        let mut c = *i;
-        for a in (0..251).rev() {
-            c = S(&c);
-            if a != 1 {
-                c = M(&c, i);
-            }
-        }
-        c
-    }
+    // fn pow2523(i: &GF) -> GF {
+    //     let mut c = *i;
+    //     for a in (0..251).rev() {
+    //         c = S(&c);
+    //         if a != 1 {
+    //             c = M(&c, i);
+    //         }
+    //     }
+    //     c
+    // }
 
     fn crypto_scalarmult(q: &mut[u8], n: &[u8], p: &[u8]) -> Result<(), NaClError> {
         let mut z: [u8; 32] = [0; 32];
@@ -665,6 +643,8 @@ pub mod tweetnacl {
 
     #[test]
     fn box_works() {
+        use std::vec;
+
         let plaintext: &[u8] = b"\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0This is only a test.";
         let (pk1, sk1) = crypto_box_keypair().unwrap();
         let (pk2, sk2) = crypto_box_keypair().unwrap();
@@ -685,4 +665,268 @@ pub mod tweetnacl {
             assert!(decrypted[i] == plaintext[i])
         }
     }
+
+}
+
+pub mod hash {
+    use std::num::Wrapping;
+    fn unwrap<T>(x: Wrapping<T>) -> T {
+        let Wrapping(x) = x;
+        x
+    }
+
+    fn dl64(x: &[u8]) -> Wrapping<u64> {
+        let mut u = Wrapping(0 as u64);
+        for i in 0..8 {
+            u = (u<<8)|Wrapping(x[i] as u64);
+        }
+        u
+    }
+
+    fn ts64(x: &mut[u8], mut u: Wrapping<u64>) {
+        for i in (0..8).rev() {
+            x[i] = unwrap(u) as u8; u = u >> 8;
+        }
+    }
+
+    #[allow(non_snake_case)]
+    fn R(x: Wrapping<u64>, c: usize) -> Wrapping<u64> {
+        (x >> c) | (x << (64 - c))
+    }
+    #[allow(non_snake_case)]
+    fn Ch(x: Wrapping<u64>, y: Wrapping<u64>, z: Wrapping<u64>) -> Wrapping<u64> {
+        (x & y) ^ (!x & z)
+    }
+    #[allow(non_snake_case)]
+    fn Maj(x: Wrapping<u64>, y: Wrapping<u64>, z: Wrapping<u64>) -> Wrapping<u64> {
+        (x & y) ^ (x & z) ^ (y & z)
+    }
+    #[allow(non_snake_case)]
+    fn Sigma0(x: Wrapping<u64>) -> Wrapping<u64> {
+        R(x,28) ^ R(x,34) ^ R(x,39)
+    }
+    #[allow(non_snake_case)]
+    fn Sigma1(x: Wrapping<u64>) -> Wrapping<u64> {
+        R(x,14) ^ R(x,18) ^ R(x,41)
+    }
+    fn sigma0(x: Wrapping<u64>) -> Wrapping<u64> {
+        R(x, 1) ^ R(x, 8) ^ (x >> 7)
+    }
+    fn sigma1(x: Wrapping<u64>) -> Wrapping<u64> {
+        R(x,19) ^ R(x,61) ^ (x >> 6)
+    }
+
+    static K: [Wrapping<u64>; 80] =
+       [Wrapping(0x428a2f98d728ae22), Wrapping(0x7137449123ef65cd),
+        Wrapping(0xb5c0fbcfec4d3b2f), Wrapping(0xe9b5dba58189dbbc),
+        Wrapping(0x3956c25bf348b538), Wrapping(0x59f111f1b605d019),
+        Wrapping(0x923f82a4af194f9b), Wrapping(0xab1c5ed5da6d8118),
+        Wrapping(0xd807aa98a3030242), Wrapping(0x12835b0145706fbe),
+        Wrapping(0x243185be4ee4b28c), Wrapping(0x550c7dc3d5ffb4e2),
+        Wrapping(0x72be5d74f27b896f), Wrapping(0x80deb1fe3b1696b1),
+        Wrapping(0x9bdc06a725c71235), Wrapping(0xc19bf174cf692694),
+        Wrapping(0xe49b69c19ef14ad2), Wrapping(0xefbe4786384f25e3),
+        Wrapping(0x0fc19dc68b8cd5b5), Wrapping(0x240ca1cc77ac9c65),
+        Wrapping(0x2de92c6f592b0275), Wrapping(0x4a7484aa6ea6e483),
+        Wrapping(0x5cb0a9dcbd41fbd4), Wrapping(0x76f988da831153b5),
+        Wrapping(0x983e5152ee66dfab), Wrapping(0xa831c66d2db43210),
+        Wrapping(0xb00327c898fb213f), Wrapping(0xbf597fc7beef0ee4),
+        Wrapping(0xc6e00bf33da88fc2), Wrapping(0xd5a79147930aa725),
+        Wrapping(0x06ca6351e003826f), Wrapping(0x142929670a0e6e70),
+        Wrapping(0x27b70a8546d22ffc), Wrapping(0x2e1b21385c26c926),
+        Wrapping(0x4d2c6dfc5ac42aed), Wrapping(0x53380d139d95b3df),
+        Wrapping(0x650a73548baf63de), Wrapping(0x766a0abb3c77b2a8),
+        Wrapping(0x81c2c92e47edaee6), Wrapping(0x92722c851482353b),
+        Wrapping(0xa2bfe8a14cf10364), Wrapping(0xa81a664bbc423001),
+        Wrapping(0xc24b8b70d0f89791), Wrapping(0xc76c51a30654be30),
+        Wrapping(0xd192e819d6ef5218), Wrapping(0xd69906245565a910),
+        Wrapping(0xf40e35855771202a), Wrapping(0x106aa07032bbd1b8),
+        Wrapping(0x19a4c116b8d2d0c8), Wrapping(0x1e376c085141ab53),
+        Wrapping(0x2748774cdf8eeb99), Wrapping(0x34b0bcb5e19b48a8),
+        Wrapping(0x391c0cb3c5c95a63), Wrapping(0x4ed8aa4ae3418acb),
+        Wrapping(0x5b9cca4f7763e373), Wrapping(0x682e6ff3d6b2b8a3),
+        Wrapping(0x748f82ee5defb2fc), Wrapping(0x78a5636f43172f60),
+        Wrapping(0x84c87814a1f0ab72), Wrapping(0x8cc702081a6439ec),
+        Wrapping(0x90befffa23631e28), Wrapping(0xa4506cebde82bde9),
+        Wrapping(0xbef9a3f7b2c67915), Wrapping(0xc67178f2e372532b),
+        Wrapping(0xca273eceea26619c), Wrapping(0xd186b8c721c0c207),
+        Wrapping(0xeada7dd6cde0eb1e), Wrapping(0xf57d4f7fee6ed178),
+        Wrapping(0x06f067aa72176fba), Wrapping(0x0a637dc5a2c898a6),
+        Wrapping(0x113f9804bef90dae), Wrapping(0x1b710b35131c471b),
+        Wrapping(0x28db77f523047d84), Wrapping(0x32caab7b40c72493),
+        Wrapping(0x3c9ebe0a15c9bebc), Wrapping(0x431d67c49c100d4c),
+        Wrapping(0x4cc5d4becb3e42b6), Wrapping(0x597f299cfc657e2a),
+        Wrapping(0x5fcb6fab3ad6faec), Wrapping(0x6c44198c4a475817) ];
+
+    fn crypto_hashblocks(x: &mut[u8], mut m: &[u8], mut n: u64) -> u64 {
+        let mut z: [Wrapping<u64>; 8] = [Wrapping(0); 8];
+        for i in 0..8 {
+            z[i] = dl64(&x[8 * i..]);
+        }
+        let mut a = z;
+
+        let mut w: [Wrapping<u64>; 16] = [Wrapping(0); 16];
+        while n >= 128 {
+            for i in 0..16 {
+                w[i] = dl64(&m[8 * i..]);
+            }
+            for i in 0..80 {
+                let mut b = a;
+                let t = a[7] + Sigma1(a[4]) + Ch(a[4],a[5],a[6]) + K[i] + w[i%16];
+                b[7] = t + Sigma0(a[0]) + Maj(a[0],a[1],a[2]);
+                b[3] = b[3] + t;
+                for j in 0..8 {
+                    a[(j+1)%8] = b[j];
+                }
+                if i%16 == 15 {
+                    for j in 0..16 {
+                        w[j] = w[j] + w[(j+9)%16] + sigma0(w[(j+1)%16]) + sigma1(w[(j+14)%16]);
+                    }
+                }
+            }
+            for i in 0..8 {
+                a[i] = a[i] + z[i];
+                z[i] = a[i];
+            }
+            m = &m[128..];
+            n -= 128;
+        }
+        for i in 0..8 {
+            ts64(&mut x[8*i..],z[i]);
+        }
+        n
+    }
+
+    const IV: [u8; 64] = [ 0x6a,0x09,0xe6,0x67,0xf3,0xbc,0xc9,0x08,
+                           0xbb,0x67,0xae,0x85,0x84,0xca,0xa7,0x3b,
+                           0x3c,0x6e,0xf3,0x72,0xfe,0x94,0xf8,0x2b,
+                           0xa5,0x4f,0xf5,0x3a,0x5f,0x1d,0x36,0xf1,
+                           0x51,0x0e,0x52,0x7f,0xad,0xe6,0x82,0xd1,
+                           0x9b,0x05,0x68,0x8c,0x2b,0x3e,0x6c,0x1f,
+                           0x1f,0x83,0xd9,0xab,0xfb,0x41,0xbd,0x6b,
+                           0x5b,0xe0,0xcd,0x19,0x13,0x7e,0x21,0x79 ];
+
+    pub fn crypto_hash(mut m: &[u8]) -> [u8; 64] {
+        let mut n = m.len();
+        let b = Wrapping(n as u64);
+        let mut h = IV;
+        crypto_hashblocks(&mut h,m,n as u64);
+        let n_old = n;
+        n &= 127;
+        m = &m[n_old - n..];
+
+        let mut x: [u8; 256] = [0; 256];
+        for i in 0..n {
+            x[i] = m[i];
+        }
+        x[n] = 128;
+
+        n = if n < 112 { 128 } else { 256 };
+        x[n-9] = unwrap(b >> 61) as u8;
+        ts64(&mut x[n-8..],b<<3);
+
+        crypto_hashblocks(&mut h,&x,n as u64);
+        h
+    }
+
+    #[test]
+    fn hash_works() {
+        use std::vec;
+
+        fn fromhexit(h: u8) -> u8 {
+            match h {
+                b'0' ... b'9' => h - b'0',
+                b'a' ... b'f' => h - b'a' + 10,
+                _ => 0,
+            }
+        }
+        fn fromhex(h: &[u8]) -> vec::Vec<u8> {
+            let mut out: vec::Vec<u8> = vec![];
+            for i in 0 .. h.len()/2 {
+                out.push(fromhexit(h[2*i])*16 + fromhexit(h[2*i+1]));
+            }
+            out
+        }
+        fn test_hash(content: &[u8], hashval: &[u8]) {
+            let c = fromhex(content);
+            let hsh = fromhex(hashval);
+            let myhsh = crypto_hash(&c);
+            assert!(hsh.len() == myhsh.len());
+            println!("");
+            for i in 0..myhsh.len() {
+                println!("{:02x}  {:02x}", myhsh[i], hsh[i])
+            }
+            for i in 0..myhsh.len() {
+                println!("comparing {:x} with {:x}", hsh[i], myhsh[i]);
+                assert!(hsh[i] == myhsh[i]);
+            }
+        }
+        test_hash(b"",
+                  b"cf83e1357eefb8bdf1542850d66d8007d620e4050b5715dc83f4a921d36ce9ce47d0d13c5d85f2b0ff8318d2877eec2f63b931bd47417a81a538327af927da3e");
+        test_hash(b"21",
+                  b"3831a6a6155e509dee59a7f451eb35324d8f8f2df6e3708894740f98fdee23889f4de5adb0c5010dfb555cda77c8ab5dc902094c52de3278f35a75ebc25f093a");
+        test_hash(b"9083",
+                  b"55586ebba48768aeb323655ab6f4298fc9f670964fc2e5f2731e34dfa4b0c09e6e1e12e3d7286b3145c61c2047fb1a2a1297f36da64160b31fa4c8c2cddd2fb4");
+        test_hash(b"0a55db",
+                  b"7952585e5330cb247d72bae696fc8a6b0f7d0804577e347d99bc1b11e52f384985a428449382306a89261ae143c2f3fb613804ab20b42dc097e5bf4a96ef919b");
+        test_hash(b"23be86d5",
+                  b"76d42c8eadea35a69990c63a762f330614a4699977f058adb988f406fb0be8f2ea3dce3a2bbd1d827b70b9b299ae6f9e5058ee97b50bd4922d6d37ddc761f8eb");
+        test_hash(b"eb0ca946c1",
+                  b"d39ecedfe6e705a821aee4f58bfc489c3d9433eb4ac1b03a97e321a2586b40dd0522f40fa5aef36afff591a78c916bfc6d1ca515c4983dd8695b1ec7951d723e");
+        test_hash(b"38667f39277b",
+                  b"85708b8ff05d974d6af0801c152b95f5fa5c06af9a35230c5bea2752f031f9bd84bd844717b3add308a70dc777f90813c20b47b16385664eefc88449f04f2131");
+        test_hash(b"b39f71aaa8a108",
+                  b"258b8efa05b4a06b1e63c7a3f925c5ef11fa03e3d47d631bf4d474983783d8c0b09449009e842fc9fa15de586c67cf8955a17d790b20f41dadf67ee8cdcdfce6");
+        test_hash(b"6f8d58b7cab1888c",
+                  b"a3941def2803c8dfc08f20c06ba7e9a332ae0c67e47ae57365c243ef40059b11be22c91da6a80c2cff0742a8f4bcd941bdee0b861ec872b215433ce8dcf3c031");
+        test_hash(b"162b0cf9b3750f9438",
+                  b"ade217305dc34392aa4b8e57f64f5a3afdd27f1fa969a9a2608353f82b95cfb4ae84598d01575a578a1068a59b34b5045ff6d5299c5cb7ee17180701b2d1d695");
+        test_hash(b"bad7c618f45be207975e",
+                  b"5886828959d1f82254068be0bd14b6a88f59f534061fb20376a0541052dd3635edf3c6f0ca3d08775e13525df9333a2113c0b2af76515887529910b6c793c8a5");
+        test_hash(b"6213e10a4420e0d9b77037",
+                  b"9982dc2a04dff165567f276fd463efef2b369fa2fbca8cee31ce0de8a79a2eb0b53e437f7d9d1f41c71d725cabb949b513075bad1740c9eefbf6a5c6633400c7");
+        test_hash(b"6332c3c2a0a625a61df71858",
+                  b"9d60375d9858d9f2416fb86fa0a2189ee4213e8710314fd1ebed0fd158b043e6e7c9a76d62c6ba1e1d411a730902309ec676dd491433c6ef66c8f116233d6ce7");
+        test_hash(b"f47be3a2b019d1beededf5b80c",
+                  b"b94292625caa28c7be24a0997eb7328062a76d9b529c0f1d568f850df6d569b5e84df07e9e246be232033ffac3adf2d18f92ab9dacfc0ecf08aff7145f0b833b");
+        test_hash(b"b1715f782ff02c6b88937f054116",
+                  b"ee1a56ee78182ec41d2c3ab33d4c41871d437c5c1ca060ee9e219cb83689b4e5a4174dfdab5d1d1096a31a7c8d3abda75c1b5e6da97e1814901c505b0bc07f25");
+        test_hash(b"9bcd5262868cd9c8a96c9e82987f03",
+                  b"2e07662a001b9755ae922c8e8a95756db5341dc0f2e62ae1cf827038f33ce055f63ad5c00b65391428434ddc01e5535e7fecbf53db66d93099b8e0b7e44e4b25");
+        test_hash(b"cd67bd4054aaa3baa0db178ce232fd5a",
+                  b"0d8521f8f2f3900332d1a1a55c60ba81d04d28dfe8c504b6328ae787925fe0188f2ba91c3a9f0c1653c4bf0ada356455ea36fd31f8e73e3951cad4ebba8c6e04");
+        test_hash(b"6ba004fd176791efb381b862e298c67b08",
+                  b"112e19144a9c51a223a002b977459920e38afd4ca610bd1c532349e9fa7c0d503215c01ad70e1b2ac5133cf2d10c9e8c1a4c9405f291da2dc45f706761c5e8fe");
+        test_hash(b"c6a170936568651020edfe15df8012acda8d",
+                  b"c36c100cdb6c8c45b072f18256d63a66c9843acb4d07de62e0600711d4fbe64c8cf314ec3457c90308147cb7ac7e4d073ba10f0ced78ea724a474b32dae71231");
+        test_hash(b"61be0c9f5cf62745c7da47c104597194db245c",
+                  b"b379249a3ca5f14c29456710114ba6f6136b34c3fc9f6fb91b59d491af782d6b237eb71aaffdd38079461cf690a46d9a4ddd602d19808ab6235d1d8aa01e8200");
+        test_hash(b"e07056d4f7277bc548099577720a581eec94141d",
+                  b"59f1856303ff165e2ab5683dddeb6e8ad81f15bb578579b999eb5746680f22cfec6dba741e591ca4d9e53904837701b374be74bbc0847a92179ac2b67496d807");
+        // Skipping a few test test vectors, because I am impatient.
+        test_hash(b"0a78b16b4026f7ec063db4e7b77c42a298e524e268093c5038853e217dcd65f66428650165fca06a1b4c9cf1537fb5d463630ff3bd71cf32c3538b1fdda3fed5c9f601203319b7e1869a",
+                  b"6095c3df5b9db7ce524d76123f77421ce888b86a477ae8c6db1d0be8d326d22c852915ab03c0c81a5b7ac71e2c14e74bda17a78d2b10585fa214f6546eb710a0");
+        test_hash(b"c1ca70ae1279ba0b918157558b4920d6b7fba8a06be515170f202fafd36fb7f79d69fad745dba6150568db1e2b728504113eeac34f527fc82f2200b462ecbf5d",
+                  b"046e46623912b3932b8d662ab42583423843206301b58bf20ab6d76fd47f1cbbcf421df536ecd7e56db5354e7e0f98822d2129c197f6f0f222b8ec5231f3967d");
+        test_hash(b"ebb3e2ad7803508ba46e81e220b1cff33ea8381504110e9f8092ef085afef84db0d436931d085d0e1b06bd218cf571c79338da31a83b4cb1ec6c06d6b98768",
+                  b"f33428d8fc67aa2cc1adcb2822f37f29cbd72abff68190483e415824f0bcecd447cb4f05a9c47031b9c50e0411c552f31cd04c30cea2bc64bcf825a5f8a66028");
+        test_hash(b"d3ddddf805b1678a02e39200f6440047acbb062e4a2f046a3ca7f1dd6eb03a18be00cd1eb158706a64af5834c68cf7f105b415194605222c99a2cbf72c50cb14bf",
+                  b"bae7c5d590bf25a493d8f48b8b4638ccb10541c67996e47287b984322009d27d1348f3ef2999f5ee0d38e112cd5a807a57830cdc318a1181e6c4653cdb8cf122");
+        test_hash(b"79ecdfd47a29a74220a52819ce4589747f2b30b364d0852cce52f91e4f0f48e61c72fa76b60d3002cae89dfc5519d3430b95c098fa4678516b5e355109ea9b3745aa41d6f8206ee64ae720f8d44653b001057f2eba7f63cd42f9",
+                  b"ba3d0fe04470f4cf8f08c46d82ae3afd1caea8c13bebbe026b5c1777aa59860af2e3da7751844e0be24072af48bc8a6fd77678aaee04e08f63395f5c8a465763");
+        test_hash(b"cede6697d422ddaa78e2d55ae080b8b9e9356c69bc558201a2d4b0b3190a812c27b34bbcee3a62b781378b1bf636b372bcbae1fa2f816a046a0a649a5c555c641fea4ccd841cc761f38f777972f8c91b0324e71c333ce787f04741439bf087ef5e895011c0",
+                  b"0be42a25d77ac6ad995c6be48e783380bad25a61732f87cefb0cce1a769cd69081f494a1a12d657664ef2b4d9c41f2ee83f6e9a84327d8756af9f985595e7d3b");
+        test_hash(b"fd2203e467574e834ab07c9097ae164532f24be1eb5d88f1af7748ceff0d2c67a21f4e4097f9d3bb4e9fbf97186e0db6db0100230a52b453d421f8ab9c9a6043aa3295ea20d2f06a2f37470d8a99075f1b8a8336f6228cf08b5942fc1fb4299c7d2480e8e82bce175540bdfad7752bc95b577f229515394f3ae5cec870a4b2f8",
+                  b"a21b1077d52b27ac545af63b32746c6e3c51cb0cb9f281eb9f3580a6d4996d5c9917d2a6e484627a9d5a06fa1b25327a9d710e027387fc3e07d7c4d14c6086cc");
+        test_hash(b"c13e6ca3abb893aa5f82c4a8ef754460628af6b75af02168f45b72f8f09e45ed127c203bc7bb80ff0c7bd96f8cc6d8110868eb2cfc01037d8058992a6cf2effcbfe498c842e53a2e68a793867968ba18efc4a78b21cdf6a11e5de821dcabab14921ddb33625d48a13baffad6fe8272dbdf4433bd0f7b813c981269c388f001",
+                  b"6e56f77f6883d0bd4face8b8d557f144661989f66d51b1fe4b8fc7124d66d9d20218616fea1bcf86c08d63bf8f2f21845a3e519083b937e70aa7c358310b5a7c");
+        test_hash(b"85360c3d4257d9878e2f5c16d3cd7d0747df3d231e1a8f63fddc69b3b1101af72153de4c8154b090c9815f2466e0e4f02f3af3a89a7fd04e306664f93e5490d4ce7fc169d553c520ae15dd02c7c613c39b4acd00e0c9a3c501566e52cecea11f7303dd1da61abf3f2532fd396047b1887255f4b256c0afcf58f3ae48c947",
+                  b"e8352ddcac59e377ea0f9c32bbb43dfd1b6c829fad1954240c41b7c45b0b09db11064b64e2442a96f6530aac2c4abf3beb1eae77f2bce4efe88fee1a70cf5423");
+        test_hash(b"18e75b47d898ac629c48e80dbfb75dae1e1700b771165eccdb18d628bfc4063dd6c3839a7ec4cd1255c4821b078cd174647b320bb685541d517c579f6b8e3cdd2e109a610c7a921653b204ad018d0340d9938735b60262662016767e1d8824a64954086229c0e3b5bd9ad88c54c1dc5aa4e768ff1a9470ee6f6e998f",
+                  b"01c756b7c20b5f95fd2b079ab6a50f28b946fb16266b07c6060945dc4fe9e0d279c5b1505b9ec7d8f8f3c9ebf0c5ee9365aec08cf278d65b64daeccc19d3cbf4");
+        test_hash(b"c2963342cfaa88ccd102a258e6d629f6b0d367dd55116502ca4451ea523623bc4175819a0648df3168e8ea8f10ed27354807d76e02ee1fdf1c9c655ee2b9fd08d557058dabdf8dcf964bfcacc996ae173971e26ea038d407c824260d06c2848a04a488c4c456dbcde2939e561ab908c4097b508638d6cda556465c9cc5",
+                  b"a4d2f59393a5fea612c3c745f4bb9f41aaf3a3ce1679aa8afc1a62baa4ed452819418c8ae1a1e658757976692390fc43d4decf7d855cd8b498b6dc60cae05a90");
+    }
+
+
 }
