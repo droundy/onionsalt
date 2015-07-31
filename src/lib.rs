@@ -64,8 +64,7 @@ pub mod tweetnacl {
     //     vn(x,y,32)
     // }
 
-    fn core(inp: &[u8], k: &[u8], c: &[u8], h: bool)
-            -> Result<[u8; 64], NaClError> {
+    fn core(inp: &[u8], k: &[u8], c: &[u8], h: bool) -> [u8; 64] {
         let mut x: [Wrapping<u32>; 16] = [Wrapping(0); 16];
         for i in 0..4 {
             x[5*i] = ld32(&c[4*i..]);
@@ -117,22 +116,20 @@ pub mod tweetnacl {
                 st32(&mut out[4 * i..],x[i] + y[i]);
             }
         }
-        Ok(out)
+        out
     }
 
-    fn crypto_core_salsa20(inp: &[u8], k: &[u8], c: &[u8])
-                           -> Result<[u8; 64], NaClError> {
+    fn crypto_core_salsa20(inp: &[u8], k: &[u8], c: &[u8]) -> [u8; 64] {
         core(inp,k,c,false)
     }
 
-    fn crypto_core_hsalsa20(n: &[u8], k: &[u8], c: &[u8])
-                            -> Result<[u8; 32], NaClError> {
-        let x = try!(core(n,k,c,true));
+    fn crypto_core_hsalsa20(n: &[u8], k: &[u8], c: &[u8]) -> [u8; 32] {
+        let x = core(n,k,c,true);
         let mut o: [u8; 32] = [0; 32];
         for i in 0..32 {
             o[i] = x[i];
         }
-        Ok(o)
+        o
     }
 
     static SIGMA: &'static [u8; 16] = b"expand 32-byte k";
@@ -148,10 +145,9 @@ pub mod tweetnacl {
         for i in 0..8 {
             z[i] = n[i];
         }
-        println!("hello world A");
         let mut c_offset: usize = 0;
         while b >= 64 {
-            let x = try!(crypto_core_salsa20(&z,k,SIGMA));
+            let x = crypto_core_salsa20(&z,k,SIGMA);
             for i in 0..64 {
                 // The following is really ugly.  I wish I could
                 // define this closure just once and have it used
@@ -176,7 +172,6 @@ pub mod tweetnacl {
             c_offset += 64;
             m_offset += 64;
         }
-        println!("hello world B");
 
         let m = |i: usize| {
             if m_offset + i < m_input.len() {
@@ -185,17 +180,13 @@ pub mod tweetnacl {
                 0
             }
         };
-        println!("hello world C");
 
         if b != 0 {
-            println!("hello world C1");
-            let x = try!(crypto_core_salsa20(&z,k,SIGMA));
-            println!("hello world C2 with b {} and m_input.len() {}", b, m_input.len());
+            let x = crypto_core_salsa20(&z,k,SIGMA);
             for i in 0..b as usize {
                 c[c_offset + i] = m(i) ^ x[i];
             }
         }
-        println!("hello world D");
         Ok(())
     }
 
@@ -211,18 +202,15 @@ pub mod tweetnacl {
     // in tweetnacl.
     pub fn crypto_stream_32(n: &Nonce, k: &[u8])
                             -> Result<[u8; 32], NaClError> {
-        println!("about to hsalsa20");
-        let s = try!(crypto_core_hsalsa20(&n.0,k,SIGMA));
+        let s = crypto_core_hsalsa20(&n.0,k,SIGMA);
         let mut c: [u8; 32] = [0; 32];
-        println!("about to salsa20");
         try!(crypto_stream_salsa20(&mut c,32,&n.0[16..],&s));
-        println!("done with salsa20");
         Ok(c)
     }
 
     pub fn crypto_stream_xor(c: &mut[u8], m: &[u8], d: u64, n: &Nonce, k: &[u8])
                              -> Result<(), NaClError> {
-        let s = try!(crypto_core_hsalsa20(&n.0,k,SIGMA));
+        let s = crypto_core_hsalsa20(&n.0,k,SIGMA);
         crypto_stream_salsa20_xor(c,m,d,&n.0[16..],&s)
     }
 
@@ -538,7 +526,7 @@ pub mod tweetnacl {
     //     c
     // }
 
-    fn crypto_scalarmult(q: &mut[u8], n: &[u8], p: &[u8]) -> Result<(), NaClError> {
+    fn crypto_scalarmult(q: &mut[u8], n: &[u8], p: &[u8]) {
         let mut z: [u8; 32] = [0; 32];
         for i in 0..31 {
             z[i] = n[i];
@@ -584,10 +572,9 @@ pub mod tweetnacl {
         x[2] = inv25519(&x[2]);
         x[1] = M(&x[1],&x[2]);
         pack25519(q,&x[1]);
-        Ok(())
     }
 
-    fn crypto_scalarmult_base(q: &mut[u8], n: &[u8]) -> Result<(), NaClError> {
+    fn crypto_scalarmult_base(q: &mut[u8], n: &[u8]) {
         crypto_scalarmult(q,n,&_9)
     }
 
@@ -602,7 +589,7 @@ pub mod tweetnacl {
         let mut pk: [u8; 32] = [0; 32];
         let mut sk: [u8; 32] = [0; 32];
         rng.fill_bytes(&mut sk);
-        try!(crypto_scalarmult_base(&mut pk, &sk));
+        crypto_scalarmult_base(&mut pk, &sk);
         Ok((PublicKey(pk), SecretKey(sk)))
     }
 
@@ -613,9 +600,9 @@ pub mod tweetnacl {
         Ok(n)
     }
 
-    pub fn crypto_box_beforenm(y: &PublicKey, x: &SecretKey) -> Result<[u8; 32], NaClError> {
+    pub fn crypto_box_beforenm(y: &PublicKey, x: &SecretKey) -> [u8; 32] {
         let mut s: [u8; 32] = [0; 32];
-        try!(crypto_scalarmult(&mut s,&x.0,&y.0));
+        crypto_scalarmult(&mut s,&x.0,&y.0);
         crypto_core_hsalsa20(&_0,&s,SIGMA)
     }
 
@@ -626,7 +613,7 @@ pub mod tweetnacl {
 
     pub fn crypto_box(c: &mut[u8], m: &[u8], n: &Nonce, y: &PublicKey, x: &SecretKey)
                   -> Result<(), NaClError> {
-        let k = try!(crypto_box_beforenm(y,x));
+        let k = crypto_box_beforenm(y,x);
         crypto_box_afternm(c, m, n, &k)
     }
 
@@ -637,7 +624,7 @@ pub mod tweetnacl {
 
     pub fn crypto_box_open(m: &mut[u8], c: &[u8], n: &Nonce, y: &PublicKey, x: &SecretKey)
                        -> Result<(), NaClError> {
-        let k = try!(crypto_box_beforenm(y,x));
+        let k = crypto_box_beforenm(y,x);
         crypto_box_open_afternm(m, c, n, &k)
     }
 
