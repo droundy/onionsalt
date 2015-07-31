@@ -8,10 +8,6 @@ pub mod tweetnacl {
         x
     }
 
-    #[test]
-    fn it_works() {
-    }
-
     static _0: [u8; 16] = [0; 16];
     static _9: [u8; 32] = [9; 32];
 
