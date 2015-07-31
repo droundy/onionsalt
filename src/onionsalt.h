@@ -56,7 +56,7 @@ their_public_keys[num_layers*crypto_box_PUBLICKEYBYTES]
 extern int onion_box_open(unsigned char *plaintext,
                           unsigned char *ciphertext,
                           unsigned long long cb_length,
-                          unsigned long long address_label_length,
+                          unsigned long long address_length,
                           const unsigned char *secret_key);
 
 /*
