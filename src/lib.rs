@@ -2,6 +2,12 @@ extern crate rand;
 
 pub mod tweetnacl {
 
+    use std::num::Wrapping;
+    fn unwrap<T>(x: Wrapping<T>) -> T {
+        let Wrapping(x) = x;
+        x
+    }
+
     #[test]
     fn it_works() {
     }
@@ -24,29 +30,30 @@ pub mod tweetnacl {
     static I: GF = [0xa0b0, 0x4a0e, 0x1b27, 0xc4ee, 0xe478, 0xad2f, 0x1806, 0x2f43,
                     0xd7a7, 0x3dfb, 0x0099, 0x2b4d, 0xdf0b, 0x4fc1, 0x2480, 0x2b83];
 
-    fn l32(x: u32, c: i32) -> u32 {
-        (x << c) | ((x&0xffffffff) >> (32 - c))
+    fn l32(x: Wrapping<u32>, c: usize) -> Wrapping<u32> {
+        (x << c) | ((x&Wrapping(0xffffffff)) >> (32 - c))
     }
 
-    fn ld32(x: &[u8]) -> u32 {
-        let mut u= x[3] as u32;
-        u = (u<<8)|x[2] as u32;
-        u = (u<<8)|x[1] as u32;
-        (u<<8)|x[0] as u32
+    fn ld32(x: &[u8]) -> Wrapping<u32> {
+        let mut u= Wrapping(x[3] as u32);
+        u = (u<<8)|Wrapping(x[2] as u32);
+        u = (u<<8)|Wrapping(x[1] as u32);
+        (u<<8)|Wrapping(x[0] as u32)
     }
 
     fn dl64(x: &[u8]) -> u64 {
-        let mut u: u64 = 0;
+        let mut u = Wrapping(0 as u64);
         for i in 0..8 {
-            u = (u<<8)|x[i] as u64;
+            u = (u<<8)|Wrapping(x[i] as u64);
         }
+        let Wrapping(u) = u;
         u
     }
 
-    fn st32(x: &mut[u8], mut u: u32) {
+    fn st32(x: &mut[u8], mut u: Wrapping<u32>) {
         for i in 0..4 {
-            x[i] = u as u8;
-            u >>= 8;
+            x[i] = unwrap(u) as u8;
+            u = u >> 8;
         }
     }
 
@@ -78,7 +85,7 @@ pub mod tweetnacl {
 
     fn core(inp: &[u8], k: &[u8], c: &[u8], h: bool)
             -> Result<[u8; 64], NaClError> {
-        let mut x: [u32; 16] = [0; 16];
+        let mut x: [Wrapping<u32>; 16] = [Wrapping(0); 16];
         for i in 0..4 {
             x[5*i] = ld32(&c[4*i..]);
             x[1+i] = ld32(&k[4*i..]);
@@ -86,22 +93,22 @@ pub mod tweetnacl {
             x[11+i] = ld32(&k[16+4*i..]);
         }
 
-        let mut y: [u32; 16] = [0; 16];
+        let mut y: [Wrapping<u32>; 16] = [Wrapping(0); 16];
         for i in 0..16 {
             y[i] = x[i];
         }
 
-        let mut w: [u32; 16] = [0; 16];
-        let mut t: [u32; 4] = [0; 4];
+        let mut w: [Wrapping<u32>; 16] = [Wrapping(0); 16];
+        let mut t: [Wrapping<u32>; 4] = [Wrapping(0); 4];
         for _ in 0..20 {
             for j in 0..4 {
                 for m in 0..4 {
                     t[m] = x[(5*j+4*m)%16];
                 }
-                t[1] ^= l32(t[0]+t[3], 7);
-                t[2] ^= l32(t[1]+t[0], 9);
-                t[3] ^= l32(t[2]+t[1],13);
-                t[0] ^= l32(t[3]+t[2],18);
+                t[1] = t[1] ^ l32(t[0]+t[3], 7);
+                t[2] = t[2] ^ l32(t[1]+t[0], 9);
+                t[3] = t[3] ^ l32(t[2]+t[1],13);
+                t[0] = t[0] ^ l32(t[3]+t[2],18);
                 for m in 0..4 {
                     w[4*j+(j+m)%4] = t[m];
                 }
@@ -114,11 +121,11 @@ pub mod tweetnacl {
         let mut out: [u8; 64] = [0; 64];
         if h {
             for i in 0..16 {
-                x[i] += y[i];
+                x[i] = x[i] + y[i];
             }
             for i in 0..4 {
-                x[5*i] -= ld32(&c[4*i..]);
-                x[6+i] -= ld32(&inp[4*i..]);
+                x[5*i] = x[5*i] - ld32(&c[4*i..]);
+                x[6+i] = x[6+i] - ld32(&inp[4*i..]);
             }
             for i in 0..4 {
                 st32(&mut out[4*i..],x[5*i]);
@@ -336,8 +343,12 @@ pub mod tweetnacl {
         crypto_verify_16(h,&x)
     }
 
-    pub fn crypto_secretbox(c: &mut[u8], m: &[u8], d: u64, n: &[u8], k: &[u8])
-                        -> Result<(), NaClError> {
+    pub fn crypto_secretbox(c: &mut[u8], m: &[u8], n: &[u8], k: &[u8])
+                            -> Result<(), NaClError> {
+        let d = c.len() as u64;
+        if d != m.len() as u64 {
+            return Err(NaClError::InvalidInput);
+        }
         if d < 32 {
             return Err(NaClError::InvalidInput);
         }
@@ -350,7 +361,7 @@ pub mod tweetnacl {
         // version of the code does, which results from my choice to
         // use a return array rather than a mut slice argument for
         // "core" above.
-        for i in 16..32 {
+        for i in 0..16 {
             c[16+i] = h[i];
         }
         Ok(())
@@ -368,6 +379,20 @@ pub mod tweetnacl {
             m[i] = 0;
         }
         Ok(())
+    }
+
+    use std::vec;
+
+    #[test]
+    fn secretbox_works() {
+        let plaintext: &[u8] = b"\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0This is only a test.";
+        let secretkey: &[u8; 32] = b"This is my secret key. It is me.";
+        let mut ciphertext: vec::Vec<u8> = vec![];
+        for _ in 0..plaintext.len() {
+            ciphertext.push(0);
+        }
+        let nonce: [u8; 32] = [0; 32];
+        crypto_secretbox(&mut ciphertext, plaintext, &nonce, secretkey);
     }
 
     // FIXME the following should be eliminated, since assignment
