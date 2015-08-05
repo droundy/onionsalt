@@ -1,4 +1,44 @@
 //! The onionsalt crate.
+//!
+//! # Examples
+//!
+//! Here is a simple example of onion encrypting a message and
+//! decrypting it.  We encrypt the message "Hi!" with two routers, and
+//! verify that everything gets decrypted all right in the end.
+//!
+//! ```
+//! # use onionsalt::*;
+//! #
+//! let (mypk, mysk) = crypto::box_keypair().unwrap();
+//! let (yourpk, yoursk) = crypto::box_keypair().unwrap();
+//! let (pk1, sk1) = crypto::box_keypair().unwrap();
+//! let (pk0, sk0) = crypto::box_keypair().unwrap();
+//!
+//! let keys_and_messages: &[(crypto::PublicKey, &[u8])] = &[(pk0, b"address 1"),
+//!                                                          (pk1, b"address 2"),
+//!                                                          (yourpk, b"\x03Hi!")];
+//! let address_length = b"address 1".len();
+//! let my_box = onionbox(address_length, &keys_and_messages).unwrap();
+//!
+//! // We now have encrypted the onionbox message.  Yay! So let's open the box...
+//!
+//! let message0 = onionbox_open_easy(&my_box, address_length, &sk0).unwrap();
+//! let (addr_1, box_1) = (&message0[0..address_length], &message0[address_length..]);
+//! assert_eq!(addr_1, b"address 1");
+//!
+//! // Now our first router has opened his message and can route it.
+//!
+//! let message1 = onionbox_open_easy(&box_1, address_length, &sk1).unwrap();
+//! let (addr_2, box_2) = (&message1[0..address_length], &message1[address_length..]);
+//! assert_eq!(addr_2, b"address 2");
+//!
+//! // Now our second router has opened his message and can route it.
+//!
+//! let your_bigmessage = onionbox_open_easy(&box_2, address_length, &yoursk).unwrap();
+//! let the_message = &your_bigmessage[1 .. your_bigmessage[0] as usize + 1];
+//! assert_eq!(the_message, b"Hi!"); // You got our friendly greeting!
+//! ```
+
 
 extern crate rand;
 
@@ -16,10 +56,10 @@ use std::vec::Vec;
 
 /// Encrypt a message in an onion directed to `their_public_keys`
 /// recipients.
-pub fn onionbox(keys_and_messages: &[(crypto::PublicKey, &[u8])])
+pub fn onionbox(address_length: usize,
+                keys_and_messages: &[(crypto::PublicKey, &[u8])])
                 -> Result<Vec<u8>, crypto::NaClError> {
     let num_layers = keys_and_messages.len();
-    let address_length = keys_and_messages[0].1.len();
     for i in 0..num_layers-1 {
         // All the addresses must be the same length.
         if keys_and_messages[i].1.len() != address_length {
@@ -143,8 +183,12 @@ fn onionbox_works() {
     }
     let (pk, _) = crypto::box_keypair().unwrap();
     keys_and_messages.push((pk, plaintext));
-    onionbox(&keys_and_messages).unwrap();
+    onionbox(keys_and_messages[0].1.len(), &keys_and_messages).unwrap();
 }
+
+/// The easy way to decrypt one layer of an onionsalt message.  Unline
+/// `onionbox_open`, this function allocates memory on the heap, and
+/// thus could have increased slowness.
 
 pub fn onionbox_open_easy(onionmessage: &[u8], address_length: usize,
                           secret_key: &crypto::SecretKey)
@@ -171,7 +215,10 @@ pub fn onionbox_open_easy(onionmessage: &[u8], address_length: usize,
     Ok(output)
 }
 
-/// Attempt to open an onionsalt message.
+/// Attempt to open an onionsalt message.  The `plaintext` and
+/// `ciphertext` arguments are padded and used as intermediate storage
+/// in order to avoid any heap allocations in this function (as in the
+/// C versions of NaCl).
 
 pub fn onionbox_open(plaintext: &mut[u8],
                      ciphertext: &mut[u8],
@@ -232,43 +279,56 @@ pub fn onionbox_open(plaintext: &mut[u8],
     Ok(())
 }
 
-#[test]
-fn onionbox_open_works() {
-    println!("onionbox_open_works");
-    let plaintext: &[u8] = b"A test.";
-    let nrouters = 1;
-    let mut keys_and_messages: Vec<(crypto::PublicKey, &[u8])> = Vec::new();
-    let mut secret_keys: Vec<crypto::SecretKey> = Vec::new();
-    let message = b"Hello world";
-    let address_length = message.len();
-    for _ in 0..nrouters {
-        let (pk, sk) = crypto::box_keypair().unwrap();
-        secret_keys.push(sk);
-        keys_and_messages.push((pk, message));
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn onionbox_open_works() {
+        for n in 0..10 {
+            println!("Testing with {} routers", n);
+            onionbox_open_works_n(n);
+        }
     }
-    let (pk, sk) = crypto::box_keypair().unwrap();
-    keys_and_messages.push((pk, plaintext));
-    secret_keys.push(sk);
-    let mut ob = onionbox(&keys_and_messages).unwrap();
-    println!("ob.len() is {}", ob.len());
-    for i in 0..keys_and_messages.len() {
-        println!("Trying layer {}", i);
-        let r = onionbox_open_easy(&ob, address_length, &secret_keys[i]).unwrap();
-        if i == nrouters {
-            break;
+
+    fn onionbox_open_works_n(n: usize) {
+        println!("onionbox_open_works");
+        let plaintext: &[u8] = b"A test.";
+        let nrouters = n;
+        let mut keys_and_messages: Vec<(crypto::PublicKey, &[u8])> = Vec::new();
+        let mut secret_keys: Vec<crypto::SecretKey> = Vec::new();
+        let message = b"Hello world";
+        let address_length = message.len();
+        for _ in 0..nrouters {
+            let (pk, sk) = crypto::box_keypair().unwrap();
+            secret_keys.push(sk);
+            keys_and_messages.push((pk, message));
         }
-        assert_eq!(message, &r[0..address_length]);
-        {
-            let mut cc = String::new();
-            cc = cc + &format!("R ? ");
-            for x in 0 .. r.len() {
-                cc = cc + &format!("{:02x}", r[x]);
+        let (pk, sk) = crypto::box_keypair().unwrap();
+        keys_and_messages.push((pk, plaintext));
+        secret_keys.push(sk);
+        let mut ob = onionbox(address_length, &keys_and_messages).unwrap();
+        println!("ob.len() is {}", ob.len());
+        for i in 0..keys_and_messages.len() {
+            println!("Trying layer {}", i);
+            let r = onionbox_open_easy(&ob, address_length, &secret_keys[i]).unwrap();
+            if i == nrouters {
+                assert_eq!(plaintext, &r[0..plaintext.len()]);
+                break;
             }
-            println!("{}", &cc);
+            assert_eq!(message, &r[0..address_length]);
+            {
+                let mut cc = String::new();
+                cc = cc + &format!("R ? ");
+                for x in 0 .. r.len() {
+                    cc = cc + &format!("{:02x}", r[x]);
+                }
+                println!("{}", &cc);
+            }
+            for i in 0..ob.len() {
+                ob[i] = r[i+address_length];
+            }
+            println!("Got {} working", i);
         }
-        for i in 0..ob.len() {
-            ob[i] = r[i+address_length];
-        }
-        println!("Got {} working", i);
     }
 }
