@@ -16,8 +16,8 @@ use std::vec::Vec;
 
 /// Encrypt a message in an onion directed to `their_public_keys`
 /// recipients.
-pub fn onion_box(keys_and_messages: &[(crypto::PublicKey, &[u8])])
-                 -> Result<Vec<u8>, crypto::NaClError> {
+pub fn onionbox(keys_and_messages: &[(crypto::PublicKey, &[u8])])
+                -> Result<Vec<u8>, crypto::NaClError> {
     let num_layers = keys_and_messages.len();
     let address_length = keys_and_messages[0].1.len();
     for i in 0..num_layers-1 {
@@ -91,6 +91,22 @@ pub fn onion_box(keys_and_messages: &[(crypto::PublicKey, &[u8])])
         try!(crypto::box_up(&mut ciphertext, &plaintext, &nonce,
                             &keys_and_messages[i].0,
                             &my_secret_keys[i]));
+        {
+            let mut cc = String::new();
+            cc = cc + &format!("E {} ", i);
+            for x in 0..ciphertext.len() {
+                cc = cc + &format!("{:02x}", ciphertext[x]);
+            }
+            println!("{}", &cc);
+        }
+        {
+            let mut cc = String::new();
+            cc = cc + &format!("P {} ", i);
+            for x in 0..32 {
+                cc = cc + &format!("{:02x}", my_public_keys[i].0[x]);
+            }
+            println!("{}", &cc);
+        }
         for j in cb_length-layer_overhead .. cb_length {
             assert!(ciphertext[j] == 0);
         }
@@ -111,20 +127,62 @@ pub fn onion_box(keys_and_messages: &[(crypto::PublicKey, &[u8])])
         ciphertext[j] = my_public_keys[0].0[j];
     }
     ciphertext.truncate(encrypted_length + 32);
+    println!("cb_length {} and message_length {}", cb_length, encrypted_length+32);
     Ok(ciphertext)
+}
+
+#[test]
+fn onionbox_works() {
+    let plaintext: &[u8] = b"This is only a test.";
+    let nrouters = 5;
+    let mut keys_and_messages: Vec<(crypto::PublicKey, &[u8])> = Vec::new();
+    for _ in 0..nrouters {
+        let (pk, _) = crypto::box_keypair().unwrap();
+        let message = b"Hello world";
+        keys_and_messages.push((pk, message));
+    }
+    let (pk, _) = crypto::box_keypair().unwrap();
+    keys_and_messages.push((pk, plaintext));
+    onionbox(&keys_and_messages).unwrap();
+}
+
+pub fn onionbox_open_easy(onionmessage: &[u8], address_length: usize,
+                          secret_key: &crypto::SecretKey)
+                          -> Result<Vec<u8>, crypto::NaClError> {
+    let layer_overhead = address_length + LAYEROVERHEADBYTES;
+    fn zeros(len: usize) -> Vec<u8> {
+        let mut out: Vec<u8> = vec![];
+        for _ in 0..len {
+            out.push(0);
+        }
+        out
+    }
+    // let mut ciphertext = zeros(100);
+    let mut ciphertext = zeros(onionmessage.len() + layer_overhead - 16);
+    let mut plaintext = zeros(onionmessage.len() + layer_overhead - 16);
+    for i in 0..onionmessage.len() {
+        ciphertext[i] = onionmessage[i];
+    }
+    try!(onionbox_open(&mut plaintext, &mut ciphertext, address_length, secret_key));
+    let mut output = zeros(onionmessage.len() + address_length);
+    for i in 0..output.len() {
+        output[i] = plaintext[i];
+    }
+    Ok(output)
 }
 
 /// Attempt to open an onionsalt message.
 
-pub fn onion_box_open(plaintext: &mut[u8],
-                      ciphertext: &mut[u8],
-                      address_length: usize,
-                      secret_key: &crypto::SecretKey)
-                      -> Result<(), crypto::NaClError> {
+pub fn onionbox_open(plaintext: &mut[u8],
+                     ciphertext: &mut[u8],
+                     address_length: usize,
+                     secret_key: &crypto::SecretKey)
+                     -> Result<(), crypto::NaClError> {
     if plaintext.len() != ciphertext.len() {
         return Err(crypto::NaClError::InvalidInput);
     }
     let cb_length = plaintext.len();
+    println!("onion opening with cb_length {}", cb_length);
 
     let layer_overhead = address_length + LAYEROVERHEADBYTES;
     let encrypted_length = cb_length - 16 - layer_overhead;
@@ -136,8 +194,8 @@ pub fn onion_box_open(plaintext: &mut[u8],
         public_key.0[i] = ciphertext[i];
     }
     // then shift things into place for the decryption.
-    for i in (16..ciphertext.len() - 16).rev() {
-        ciphertext[i+16] = ciphertext[i];
+    for i in (16..ciphertext.len() - 32) {
+        ciphertext[i] = ciphertext[i+16];
     }
     // zero out the initial padding
     for i in 0..16 {
@@ -147,6 +205,22 @@ pub fn onion_box_open(plaintext: &mut[u8],
     // key for encryption
     let nonce = crypto::Nonce([0; 32]);
 
+    {
+        let mut cc = String::new();
+        cc = cc + &format!("D ? ");
+        for x in 0..ciphertext.len() {
+            cc = cc + &format!("{:02x}", ciphertext[x]);
+        }
+        println!("{}", &cc);
+    }
+    {
+        let mut cc = String::new();
+        cc = cc + &format!("P ? ");
+        for x in 0..32 {
+            cc = cc + &format!("{:02x}", public_key.0[x]);
+        }
+        println!("{}", &cc);
+    }
     try!(crypto::box_open(plaintext, ciphertext,
                           &nonce, &public_key, secret_key));
     for i in 0..transmitted_length + address_length {
@@ -156,4 +230,45 @@ pub fn onion_box_open(plaintext: &mut[u8],
         plaintext[i] = 0;
     }
     Ok(())
+}
+
+#[test]
+fn onionbox_open_works() {
+    println!("onionbox_open_works");
+    let plaintext: &[u8] = b"A test.";
+    let nrouters = 1;
+    let mut keys_and_messages: Vec<(crypto::PublicKey, &[u8])> = Vec::new();
+    let mut secret_keys: Vec<crypto::SecretKey> = Vec::new();
+    let message = b"Hello world";
+    let address_length = message.len();
+    for _ in 0..nrouters {
+        let (pk, sk) = crypto::box_keypair().unwrap();
+        secret_keys.push(sk);
+        keys_and_messages.push((pk, message));
+    }
+    let (pk, sk) = crypto::box_keypair().unwrap();
+    keys_and_messages.push((pk, plaintext));
+    secret_keys.push(sk);
+    let mut ob = onionbox(&keys_and_messages).unwrap();
+    println!("ob.len() is {}", ob.len());
+    for i in 0..keys_and_messages.len() {
+        println!("Trying layer {}", i);
+        let r = onionbox_open_easy(&ob, address_length, &secret_keys[i]).unwrap();
+        if i == nrouters {
+            break;
+        }
+        assert_eq!(message, &r[0..address_length]);
+        {
+            let mut cc = String::new();
+            cc = cc + &format!("R ? ");
+            for x in 0 .. r.len() {
+                cc = cc + &format!("{:02x}", r[x]);
+            }
+            println!("{}", &cc);
+        }
+        for i in 0..ob.len() {
+            ob[i] = r[i+address_length];
+        }
+        println!("Got {} working", i);
+    }
 }
