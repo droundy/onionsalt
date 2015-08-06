@@ -331,56 +331,53 @@ impl std::convert::From<std::io::Error> for NaClError {
 #[derive(Debug, Clone, Copy)]
 pub struct PublicKey(pub [u8; 32]);
 
-pub trait ToKey {
-    fn to_32bytes(&self) -> [u8; 32];
+/// A trait that is defined for types that can be used as a public
+/// key.  Specifically, [u8; 32], [u8] (with possible crash on the
+/// wrong length) and PublicKey all implement this trait.
+pub trait ToPublicKey {
+    fn to_public_key(&self) -> Result<PublicKey, NaClError>;
 }
-impl ToKey for [u8] {
-    fn to_32bytes(&self) -> [u8; 32] {
+impl ToPublicKey for PublicKey {
+    fn to_public_key(&self) -> Result<PublicKey, NaClError> {
+        Ok(self.clone())
+    }
+}
+impl ToPublicKey for [u8; 32] {
+    fn to_public_key(&self) -> Result<PublicKey, NaClError> {
+        Ok(PublicKey(*self))
+    }
+}
+impl ToPublicKey for [u8] {
+    fn to_public_key(&self) -> Result<PublicKey, NaClError> {
         if self.len() < 32 {
-            panic!("Too few bytes for key: {}", self.len());
+            return Err(NaClError::InvalidInput);
         }
         let mut k = [0; 32];
         for i in 0..32 {
             k[i] = self[i];
         }
-        k
-    }
-}
-impl ToKey for [u8; 32] {
-    fn to_32bytes(&self) -> [u8; 32] {
-        *self
-    }
-}
-/// A trait that is defined for types that can be used as a public
-/// key.  Specifically, [u8; 32], [u8] (with possible crash on the
-/// wrong length) and PublicKey all implement this trait.
-pub trait ToPublicKey {
-    fn to_public_key(&self) -> PublicKey;
-}
-impl ToPublicKey for PublicKey {
-    fn to_public_key(&self) -> PublicKey {
-        self.clone()
-    }
-}
-impl<T: ToKey> ToPublicKey for T {
-    fn to_public_key(&self) -> PublicKey {
-        PublicKey(self.to_32bytes())
+        Ok(PublicKey(k))
     }
 }
 /// A trait that is defined for types that can be used as a secret
 /// key.  Specifically, [u8; 32], [u8] (with possible crash on the
 /// wrong length) and SecretKey all implement this trait.
 pub trait ToSecretKey {
-    fn to_secret_key(&self) -> SecretKey;
+    fn to_secret_key(&self) -> Result<SecretKey, NaClError>;
 }
 impl ToSecretKey for SecretKey {
-    fn to_secret_key(&self) -> SecretKey {
-        self.clone()
+    fn to_secret_key(&self) -> Result<SecretKey, NaClError> {
+        Ok(self.clone())
     }
 }
-impl<T: ToKey> ToSecretKey for T {
-    fn to_secret_key(&self) -> SecretKey {
-        SecretKey(self.to_32bytes())
+impl ToSecretKey for [u8; 32] {
+    fn to_secret_key(&self) -> Result<SecretKey, NaClError> {
+        Ok(SecretKey(*self))
+    }
+}
+impl ToSecretKey for [u8] {
+    fn to_secret_key(&self) -> Result<SecretKey, NaClError> {
+        Ok(SecretKey(try!(self.to_public_key()).0))
     }
 }
 
@@ -758,13 +755,14 @@ pub fn random_nonce() -> Result<Nonce, NaClError> {
 /// This is useful if you want to handle many messages between the
 /// same two recipients, since it allows you to do the public-key
 /// business just once.
-pub fn box_beforenm<PK: ToPublicKey, SK: ToSecretKey>(pk: &PK, sk: &SK)
-                                                      -> [u8; 32] {
-    let x = sk.to_secret_key();
-    let y = pk.to_public_key();
+pub fn box_beforenm<PK: ToPublicKey,
+                    SK: ToSecretKey>(pk: &PK, sk: &SK)
+                                     -> Result<[u8; 32], NaClError> {
+    let x = try!(sk.to_secret_key());
+    let y = try!(pk.to_public_key());
     let mut s: [u8; 32] = [0; 32];
     scalarmult(&mut s,&x.0,&y.0);
-    core_hsalsa20(&_0,&s,SIGMA)
+    Ok(core_hsalsa20(&_0,&s,SIGMA))
 }
 
 /// Encrypt a message after creating a secret key using
@@ -781,7 +779,7 @@ pub fn box_up<PK: ToPublicKey, SK: ToSecretKey>(c: &mut[u8], m: &[u8],
                                                 n: &Nonce,
                                                 pk: &PK, sk: &SK)
               -> Result<(), NaClError> {
-    let k = box_beforenm(pk,sk);
+    let k = try!(box_beforenm(pk,sk));
     box_afternm(c, m, n, &k)
 }
 
@@ -798,7 +796,7 @@ pub fn box_open_afternm(m: &mut[u8], c: &[u8], n: &Nonce, k: &[u8; 32])
 pub fn box_open<PK: ToPublicKey, SK: ToSecretKey>(m: &mut[u8], c: &[u8], n: &Nonce,
                                                   pk: &PK, sk: &SK)
                    -> Result<(), NaClError> {
-    let k = box_beforenm(pk,sk);
+    let k = try!(box_beforenm(pk,sk));
     box_open_afternm(m, c, n, &k)
 }
 

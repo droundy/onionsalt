@@ -171,21 +171,6 @@ pub fn onionbox<PK: crypto::ToPublicKey>(address_length: usize,
     Ok(ciphertext)
 }
 
-#[test]
-fn onionbox_works() {
-    let plaintext: &[u8] = b"This is only a test.";
-    let nrouters = 5;
-    let mut keys_and_messages: Vec<(crypto::PublicKey, &[u8])> = Vec::new();
-    for _ in 0..nrouters {
-        let (pk, _) = crypto::box_keypair().unwrap();
-        let message = b"Hello world";
-        keys_and_messages.push((pk, message));
-    }
-    let (pk, _) = crypto::box_keypair().unwrap();
-    keys_and_messages.push((pk, plaintext));
-    onionbox(keys_and_messages[0].1.len(), &keys_and_messages).unwrap();
-}
-
 /// The easy way to decrypt one layer of an onionsalt message.  Unline
 /// `onionbox_open`, this function allocates memory on the heap, and
 /// thus could have increased slowness.
@@ -282,6 +267,41 @@ pub fn onionbox_open<SK: crypto::ToSecretKey>(plaintext: &mut[u8],
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn onionbox_works() {
+        let plaintext: &[u8] = b"This is only a test.";
+        let nrouters = 5;
+        let mut keys_and_messages: Vec<(crypto::PublicKey, &[u8])> = Vec::new();
+        for _ in 0..nrouters {
+            let (pk, _) = crypto::box_keypair().unwrap();
+            let message = b"Hello world";
+            keys_and_messages.push((pk, message));
+        }
+        let (pk, _) = crypto::box_keypair().unwrap();
+        keys_and_messages.push((pk, plaintext));
+        onionbox(keys_and_messages[0].1.len(), &keys_and_messages).unwrap();
+    }
+
+    #[allow(non_snake_case)]
+    #[test]
+    fn u8_is_ToPublicKey() {
+        use crypto::{ToPublicKey};
+        let x: [u8; 32] = [0; 32];
+        println!("x.public_key is {:?}", x.to_public_key());
+        let y = &x[0..32];
+        println!("y.public_key is {:?}", y.to_public_key());
+    }
+
+    #[allow(non_snake_case)]
+    #[test]
+    fn u8_is_ToSecretKey() {
+        use crypto::{ToSecretKey};
+        let x: [u8; 32] = [0; 32];
+        println!("x.secret_key is {:?}", x.to_secret_key());
+        let y = &x[0..32];
+        println!("y.secret_key is {:?}", y.to_secret_key());
+    }
 
     #[test]
     fn onionbox_open_works() {
