@@ -331,7 +331,7 @@ impl std::convert::From<std::io::Error> for NaClError {
 #[derive(Debug, Clone, Copy)]
 pub struct PublicKey(pub [u8; 32]);
 
-trait ToKey {
+pub trait ToKey {
     fn to_32bytes(&self) -> [u8; 32];
 }
 impl ToKey for [u8] {
