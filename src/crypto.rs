@@ -328,11 +328,14 @@ impl std::convert::From<std::io::Error> for NaClError {
 }
 
 /// A public key.
+#[derive(Debug, Clone, Copy)]
 pub struct PublicKey(pub [u8; 32]);
 /// A secret key.
+#[derive(Debug, Clone, Copy)]
 pub struct SecretKey(pub [u8; 32]);
 /// A nonce.  You should never reuse a nonce for two different
 /// messages between the same set of keys.
+#[derive(Debug, Clone, Copy)]
 pub struct Nonce(pub [u8; 32]);
 
 fn onetimeauth(mut m: &[u8], mut n: u64, k: &[u8])
