@@ -56,9 +56,9 @@ use std::vec::Vec;
 
 /// Encrypt a message in an onion directed to `their_public_keys`
 /// recipients.
-pub fn onionbox(address_length: usize,
-                keys_and_messages: &[(crypto::PublicKey, &[u8])])
-                -> Result<Vec<u8>, crypto::NaClError> {
+pub fn onionbox<PK: crypto::ToPublicKey>(address_length: usize,
+                                         keys_and_messages: &[(PK, &[u8])])
+                                         -> Result<Vec<u8>, crypto::NaClError> {
     let num_layers = keys_and_messages.len();
     for i in 0..num_layers-1 {
         // All the addresses must be the same length.
@@ -190,9 +190,9 @@ fn onionbox_works() {
 /// `onionbox_open`, this function allocates memory on the heap, and
 /// thus could have increased slowness.
 
-pub fn onionbox_open_easy(onionmessage: &[u8], address_length: usize,
-                          secret_key: &crypto::SecretKey)
-                          -> Result<Vec<u8>, crypto::NaClError> {
+pub fn onionbox_open_easy<SK: crypto::ToSecretKey>(onionmessage: &[u8], address_length: usize,
+                                                   secret_key: &SK)
+                                                   -> Result<Vec<u8>, crypto::NaClError> {
     let layer_overhead = address_length + LAYEROVERHEADBYTES;
     fn zeros(len: usize) -> Vec<u8> {
         let mut out: Vec<u8> = vec![];
@@ -220,11 +220,11 @@ pub fn onionbox_open_easy(onionmessage: &[u8], address_length: usize,
 /// in order to avoid any heap allocations in this function (as in the
 /// C versions of NaCl).
 
-pub fn onionbox_open(plaintext: &mut[u8],
-                     ciphertext: &mut[u8],
-                     address_length: usize,
-                     secret_key: &crypto::SecretKey)
-                     -> Result<(), crypto::NaClError> {
+pub fn onionbox_open<SK: crypto::ToSecretKey>(plaintext: &mut[u8],
+                                              ciphertext: &mut[u8],
+                                              address_length: usize,
+                                              secret_key: &SK)
+                                              -> Result<(), crypto::NaClError> {
     if plaintext.len() != ciphertext.len() {
         return Err(crypto::NaClError::InvalidInput);
     }

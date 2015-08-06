@@ -330,6 +330,60 @@ impl std::convert::From<std::io::Error> for NaClError {
 /// A public key.
 #[derive(Debug, Clone, Copy)]
 pub struct PublicKey(pub [u8; 32]);
+
+trait ToKey {
+    fn to_32bytes(&self) -> [u8; 32];
+}
+impl ToKey for [u8] {
+    fn to_32bytes(&self) -> [u8; 32] {
+        if self.len() < 32 {
+            panic!("Too few bytes for key: {}", self.len());
+        }
+        let mut k = [0; 32];
+        for i in 0..32 {
+            k[i] = self[i];
+        }
+        k
+    }
+}
+impl ToKey for [u8; 32] {
+    fn to_32bytes(&self) -> [u8; 32] {
+        *self
+    }
+}
+/// A trait that is defined for types that can be used as a public
+/// key.  Specifically, [u8; 32], [u8] (with possible crash on the
+/// wrong length) and PublicKey all implement this trait.
+pub trait ToPublicKey {
+    fn to_public_key(&self) -> PublicKey;
+}
+impl ToPublicKey for PublicKey {
+    fn to_public_key(&self) -> PublicKey {
+        self.clone()
+    }
+}
+impl<T: ToKey> ToPublicKey for T {
+    fn to_public_key(&self) -> PublicKey {
+        PublicKey(self.to_32bytes())
+    }
+}
+/// A trait that is defined for types that can be used as a secret
+/// key.  Specifically, [u8; 32], [u8] (with possible crash on the
+/// wrong length) and SecretKey all implement this trait.
+pub trait ToSecretKey {
+    fn to_secret_key(&self) -> SecretKey;
+}
+impl ToSecretKey for SecretKey {
+    fn to_secret_key(&self) -> SecretKey {
+        self.clone()
+    }
+}
+impl<T: ToKey> ToSecretKey for T {
+    fn to_secret_key(&self) -> SecretKey {
+        SecretKey(self.to_32bytes())
+    }
+}
+
 /// A secret key.
 #[derive(Debug, Clone, Copy)]
 pub struct SecretKey(pub [u8; 32]);
@@ -704,7 +758,10 @@ pub fn random_nonce() -> Result<Nonce, NaClError> {
 /// This is useful if you want to handle many messages between the
 /// same two recipients, since it allows you to do the public-key
 /// business just once.
-pub fn box_beforenm(y: &PublicKey, x: &SecretKey) -> [u8; 32] {
+pub fn box_beforenm<PK: ToPublicKey, SK: ToSecretKey>(pk: &PK, sk: &SK)
+                                                      -> [u8; 32] {
+    let x = sk.to_secret_key();
+    let y = pk.to_public_key();
     let mut s: [u8; 32] = [0; 32];
     scalarmult(&mut s,&x.0,&y.0);
     core_hsalsa20(&_0,&s,SIGMA)
@@ -720,9 +777,11 @@ pub fn box_afternm(c: &mut[u8], m: &[u8], n: &Nonce, k: &[u8; 32])
 
 /// An implementation of the NaCl function `crypto_box`, renamed
 /// to `crypto::box_up` because `box` is a keyword in rust.
-pub fn box_up(c: &mut[u8], m: &[u8], n: &Nonce, y: &PublicKey, x: &SecretKey)
+pub fn box_up<PK: ToPublicKey, SK: ToSecretKey>(c: &mut[u8], m: &[u8],
+                                                n: &Nonce,
+                                                pk: &PK, sk: &SK)
               -> Result<(), NaClError> {
-    let k = box_beforenm(y,x);
+    let k = box_beforenm(pk,sk);
     box_afternm(c, m, n, &k)
 }
 
@@ -736,9 +795,10 @@ pub fn box_open_afternm(m: &mut[u8], c: &[u8], n: &Nonce, k: &[u8; 32])
 
 /// Open a message encrypted with `crypto::box_up`.
 ///
-pub fn box_open(m: &mut[u8], c: &[u8], n: &Nonce, y: &PublicKey, x: &SecretKey)
+pub fn box_open<PK: ToPublicKey, SK: ToSecretKey>(m: &mut[u8], c: &[u8], n: &Nonce,
+                                                  pk: &PK, sk: &SK)
                    -> Result<(), NaClError> {
-    let k = box_beforenm(y,x);
+    let k = box_beforenm(pk,sk);
     box_open_afternm(m, c, n, &k)
 }
 
