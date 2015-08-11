@@ -71,6 +71,8 @@
 //! }
 //! ```
 
+#![deny(warnings)]
+
 use std::num::Wrapping;
 fn unwrap<T>(x: Wrapping<T>) -> T {
     let Wrapping(x) = x;
@@ -423,9 +425,9 @@ impl<'a> ToNonce for &'a [u8] {
     }
 }
 
-fn onetimeauth(mut m: &[u8], mut n: u64, k: &[u8])
-                      -> Result<[u8; 16], NaClError> {
-    //u32 s,i,j,u,x[17],r[17],h[17],c[17],g[17];
+fn onetimeauth(mut m: &[u8], k: &[u8])
+               -> Result<[u8; 16], NaClError> {
+    let mut n = m.len();
 
     let x: &mut[u32; 17] = &mut [0; 17];
     let r: &mut[u32; 17] = &mut [0; 17];
@@ -447,13 +449,13 @@ fn onetimeauth(mut m: &[u8], mut n: u64, k: &[u8])
         for j in 0..17 {
             c[j] = 0;
         }
-        let nor16: usize = if n < 16 { n } else { 16 } as usize;
+        let nor16 = if n < 16 { n } else { 16 } as usize;
         for j in 0..nor16 {
             c[j] = m[j] as u32;
         }
         c[nor16] = 1;
         m = &m[nor16..];
-        n -= nor16 as u64;
+        n -= nor16;
         add1305(h,c);
         for i in 0..17 {
             x[i] = 0;
@@ -503,9 +505,9 @@ fn onetimeauth(mut m: &[u8], mut n: u64, k: &[u8])
     Ok(out)
 }
 
-fn onetimeauth_verify(h: &[u8], m: &[u8], n: u64, k: &[u8])
-                                 -> Result<(), NaClError> {
-    let x = try!(onetimeauth(m,n,k));
+fn onetimeauth_verify(h: &[u8], m: &[u8], k: &[u8])
+                      -> Result<(), NaClError> {
+    let x = try!(onetimeauth(m, k));
     verify_16(h,&x)
 }
 
@@ -520,7 +522,7 @@ pub fn secretbox(c: &mut[u8], m: &[u8], n: &Nonce, k: &[u8])
         return Err(NaClError::InvalidInput);
     }
     try!(stream_xor(c,m,d,n,k));
-    let h = try!(onetimeauth(&c[32..],d - 32,c));
+    let h = try!(onetimeauth(&c[32..], c));
     for i in 0..16 {
         c[i] = 0;
     }
@@ -544,10 +546,8 @@ pub fn secretbox_open(m: &mut[u8], c: &[u8], n: &Nonce, k: &[u8])
     if d < 32 {
         return Err(NaClError::InvalidInput);
     }
-    println!("About to stream_32");
     let x = try!(stream_32(n,k));
-    println!("About to verify");
-    try!(onetimeauth_verify(&c[16..],&c[32..],d - 32,&x));
+    try!(onetimeauth_verify(&c[16..],&c[32..],&x));
     try!(stream_xor(m,c,d,n,k));
     for i in 0..32 {
         m[i] = 0;
@@ -574,6 +574,73 @@ fn secretbox_works() {
         decrypted.push(0);
     }
     secretbox_open(&mut decrypted, &ciphertext, &nonce, secretkey).unwrap();
+    for i in 0..decrypted.len() {
+        assert!(decrypted[i] == plaintext[i])
+    }
+}
+
+/// Use symmetric encryption to encrypt a message, with only the first
+/// `nauth` bytes plaintext authenticated.
+fn funnybox(c: &mut[u8], m: &[u8], nauth: usize, n: &Nonce, k: &[u8])
+                -> Result<(), NaClError> {
+    let d = c.len() as u64;
+    if d != m.len() as u64 || nauth > d as usize -32 || d < 32 {
+        return Err(NaClError::InvalidInput);
+    }
+    try!(stream_xor(c,m,d,n,k));
+    let h = try!(onetimeauth(&c[32..32+nauth], c));
+    for i in 0..16 {
+        c[i] = 0;
+    }
+    // The following loop is additional overhead beyond what the C
+    // version of the code does, which results from my choice to
+    // use a return array rather than a mut slice argument for
+    // "core" above.
+    for i in 0..16 {
+        c[16+i] = h[i];
+    }
+    Ok(())
+}
+
+/// Decrypt a message encrypted with `funnybox`, only authenticating
+/// the first `nauth` bytes.
+pub fn funnybox_open(m: &mut[u8], c: &[u8], nauth: usize, n: &Nonce, k: &[u8])
+                             -> Result<(), NaClError> {
+    let d = c.len() as u64;
+    if m.len() as u64 != d || nauth > d as usize - 32 || d < 32 {
+        return Err(NaClError::InvalidInput);
+    }
+    println!("About to stream_32");
+    let x = try!(stream_32(n,k));
+    println!("About to verify");
+    try!(onetimeauth_verify(&c[16..],&c[32..32+nauth],&x));
+    try!(stream_xor(m,c,d,n,k));
+    for i in 0..32 {
+        m[i] = 0;
+    }
+    Ok(())
+}
+
+#[test]
+fn funnybox_works() {
+    use std::vec;
+
+    let plaintext: &[u8] = b"\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0This is only a test.";
+    let nauth = "This is only".len();
+    let secretkey: &[u8; 32] = b"This is my secret key. It is me.";
+    let mut ciphertext: vec::Vec<u8> = vec![];
+    for _ in 0..plaintext.len() {
+        ciphertext.push(0);
+    }
+    let nonce = Nonce([0; 32]);
+    funnybox(&mut ciphertext, plaintext, nauth, &nonce, secretkey).unwrap();
+    // There has got to be a better way to allocate an array of
+    // zeros with dynamically determined type.
+    let mut decrypted: vec::Vec<u8> = vec::Vec::with_capacity(plaintext.len());
+    for _ in 0..plaintext.len() {
+        decrypted.push(0);
+    }
+    funnybox_open(&mut decrypted, &ciphertext, nauth, &nonce, secretkey).unwrap();
     for i in 0..decrypted.len() {
         assert!(decrypted[i] == plaintext[i])
     }
@@ -861,6 +928,114 @@ fn box_works() {
         assert!(decrypted[i] == plaintext[i])
     }
 }
+
+/// Prepare to either open or encrypt some public-key messages.
+/// This is useful if you want to handle many messages between the
+/// same two recipients, since it allows you to do the public-key
+/// business just once.
+pub fn sillybox_beforenm<PK: ToPublicKey,
+                    SK: ToSecretKey>(pk: &PK, sk: &SK)
+                                     -> Result<[u8; 32], NaClError> {
+    let x = try!(sk.to_secret_key());
+    let y = try!(pk.to_public_key());
+    let mut s: [u8; 32] = [0; 32];
+    scalarmult(&mut s,&x.0,&y.0);
+    Ok(core_hsalsa20(&_0,&s,SIGMA))
+}
+
+/// Encrypt a message after creating a secret key using
+/// `sillybox_beforenm`.  The two functions together come out to the
+/// same thing as `sillybox`, which you should read to find out how it
+/// differs from the standard NaCl `box` encryption.
+pub fn sillybox_afternm(c: &mut[u8], m: &[u8], nauth: usize,
+                        n: &Nonce, k: &[u8; 32])
+                   -> Result<(), NaClError> {
+    funnybox(c, m, nauth, n, k)
+}
+
+/// An implementation of public-key encryption similar to the NaCl
+/// function `crypto_box` (renamed `crypto::sillybox_up` in this
+/// package), but with the feature that it only authenticates the
+/// first `nauth` bytes.  This is not useful for most purposes (thus
+/// its silly name), but is helpful for enabling round-trip onion
+/// routing in which all the routing information is authenticated (to
+/// information leaks triggered by maliciously modified packets), but
+/// information may be added to the communication en-route.
+pub fn sillybox<N: ToNonce,
+                PK: ToPublicKey,
+                SK: ToSecretKey>(c: &mut[u8], m: &[u8], nauth: usize,
+                                 n: &N, pk: &PK, sk: &SK)
+                                 -> Result<(), NaClError> {
+    let k = try!(sillybox_beforenm(pk,sk));
+    sillybox_afternm(c, m, nauth, &try!(n.to_nonce()), &k)
+}
+
+/// Decrypt a message using a key that was precomputed using
+/// `sillybox_beforenm`.  The two functions together are the same as
+/// the easier-to-use `sillybox_open`.
+pub fn sillybox_open_afternm(m: &mut[u8], c: &[u8], nauth: usize,
+                             n: &Nonce, k: &[u8; 32])
+                           -> Result<(), NaClError> {
+    funnybox_open(m,c,nauth,n,k)
+}
+
+/// Open a message encrypted with `crypto::sillybox_up`, only
+/// authenticating the first `nauth` bytes.  It is your business to
+/// separately verify (or distrust) the remaining bytes.  An obvious
+/// approach would be to nest in the remaining bytes an encrypted and
+/// authenticated message.
+///
+pub fn sillybox_open<N: ToNonce,
+                     PK: ToPublicKey,
+                     SK: ToSecretKey>(m: &mut[u8], c: &[u8], nauth: usize,
+                                      n: &N, pk: &PK, sk: &SK)
+                                      -> Result<(), NaClError> {
+    let k = try!(sillybox_beforenm(pk,sk));
+    sillybox_open_afternm(m, c, nauth, &try!(n.to_nonce()), &k)
+}
+
+#[test]
+fn sillybox_works() {
+    use std::vec;
+
+    let plaintext: &[u8] = b"\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0This is only a test.";
+    let nauth = "This is only".len();
+    let (pk1, sk1) = box_keypair().unwrap();
+    let (pk2, sk2) = box_keypair().unwrap();
+    let mut ciphertext: vec::Vec<u8> = vec![];
+    for _ in 0..plaintext.len() {
+        ciphertext.push(0);
+    }
+    let nonce = Nonce([0; 32]);
+    sillybox(&mut ciphertext, plaintext, nauth, &nonce, &pk1, &sk2).unwrap();
+    // There has got to be a better way to allocate an array of
+    // zeros with dynamically determined type.
+    let mut decrypted: vec::Vec<u8> = vec::Vec::with_capacity(plaintext.len());
+    for _ in 0..plaintext.len() {
+        decrypted.push(0);
+    }
+    sillybox_open(&mut decrypted, &ciphertext, nauth,
+                  &nonce, &pk2, &sk1).unwrap();
+    for i in 0..decrypted.len() {
+        assert!(decrypted[i] == plaintext[i])
+    }
+
+    // Verify that we authenticate the first nauth bytes.
+    for i in 16..32+nauth {
+        ciphertext[i] ^= 1;
+        assert!(sillybox_open(&mut decrypted, &ciphertext, nauth,
+                              &nonce, &pk2, &sk1).is_err());
+        ciphertext[i] ^= 1;
+    }
+    // Verify that we do not authenticate any of the remaining bytes.
+    for i in 32+nauth..ciphertext.len() {
+        ciphertext[i] ^= 1;
+        assert!(sillybox_open(&mut decrypted, &ciphertext, nauth,
+                              &nonce, &pk2, &sk1).is_ok());
+        ciphertext[i] ^= 1;
+    }
+}
+
 
 // The following code all has to do with implementing sha512.
 
