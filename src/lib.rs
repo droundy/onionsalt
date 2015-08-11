@@ -286,11 +286,14 @@ mod tests {
     #[allow(non_snake_case)]
     #[test]
     fn u8_is_ToPublicKey() {
-        use crypto::{ToPublicKey};
+        use crypto::{ToPublicKey, PublicKey};
         let x: [u8; 32] = [0; 32];
         println!("x.public_key is {:?}", x.to_public_key());
-        let y = &x[0..32];
+        let y: &[u8] = &x[0..32];
         println!("y.public_key is {:?}", y.to_public_key());
+        println!("PublicKey::new(&x) is {:?}", PublicKey::new(&x));
+        let z = PublicKey::new(&y);
+        println!("PublicKey::new(y) is {:?}", z);
     }
 
     #[allow(non_snake_case)]

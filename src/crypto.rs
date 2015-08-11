@@ -330,9 +330,14 @@ impl std::convert::From<std::io::Error> for NaClError {
 /// A public key.
 #[derive(Debug, Clone, Copy)]
 pub struct PublicKey(pub [u8; 32]);
+impl PublicKey {
+    pub fn new<T: ToPublicKey>(x: &T) -> Result<PublicKey, NaClError> {
+        return x.to_public_key()
+    }
+}
 
 /// A trait that is defined for types that can be used as a public
-/// key.  Specifically, [u8; 32], [u8] (with possible crash on the
+/// key.  Specifically, [u8; 32], &[u8] (with possible crash on the
 /// wrong length) and PublicKey all implement this trait.
 pub trait ToPublicKey {
     fn to_public_key(&self) -> Result<PublicKey, NaClError>;
@@ -347,7 +352,7 @@ impl ToPublicKey for [u8; 32] {
         Ok(PublicKey(*self))
     }
 }
-impl ToPublicKey for [u8] {
+impl<'a> ToPublicKey for &'a [u8] {
     fn to_public_key(&self) -> Result<PublicKey, NaClError> {
         if self.len() < 32 {
             return Err(NaClError::InvalidInput);
@@ -359,8 +364,18 @@ impl ToPublicKey for [u8] {
         Ok(PublicKey(k))
     }
 }
+
+/// A secret key.
+#[derive(Debug, Clone, Copy)]
+pub struct SecretKey(pub [u8; 32]);
+impl SecretKey {
+    pub fn new<T: ToSecretKey>(x: &T) -> Result<SecretKey, NaClError> {
+        return x.to_secret_key()
+    }
+}
+
 /// A trait that is defined for types that can be used as a secret
-/// key.  Specifically, [u8; 32], [u8] (with possible crash on the
+/// key.  Specifically, [u8; 32], &[u8] (with possible crash on the
 /// wrong length) and SecretKey all implement this trait.
 pub trait ToSecretKey {
     fn to_secret_key(&self) -> Result<SecretKey, NaClError>;
@@ -375,19 +390,38 @@ impl ToSecretKey for [u8; 32] {
         Ok(SecretKey(*self))
     }
 }
-impl ToSecretKey for [u8] {
+impl<'a> ToSecretKey for &'a [u8] {
     fn to_secret_key(&self) -> Result<SecretKey, NaClError> {
         Ok(SecretKey(try!(self.to_public_key()).0))
     }
 }
 
-/// A secret key.
-#[derive(Debug, Clone, Copy)]
-pub struct SecretKey(pub [u8; 32]);
 /// A nonce.  You should never reuse a nonce for two different
 /// messages between the same set of keys.
 #[derive(Debug, Clone, Copy)]
 pub struct Nonce(pub [u8; 32]);
+
+/// A trait that is defined for types that can be used as a nonce.
+/// Specifically, [u8; 32], &[u8] (with possible crash on the wrong
+/// length) and Nonce all implement this trait.
+pub trait ToNonce {
+    fn to_nonce(&self) -> Result<Nonce, NaClError>;
+}
+impl ToNonce for Nonce {
+    fn to_nonce(&self) -> Result<Nonce, NaClError> {
+        Ok(self.clone())
+    }
+}
+impl ToNonce for [u8; 32] {
+    fn to_nonce(&self) -> Result<Nonce, NaClError> {
+        Ok(Nonce(*self))
+    }
+}
+impl<'a> ToNonce for &'a [u8] {
+    fn to_nonce(&self) -> Result<Nonce, NaClError> {
+        Ok(Nonce(try!(self.to_public_key()).0))
+    }
+}
 
 fn onetimeauth(mut m: &[u8], mut n: u64, k: &[u8])
                       -> Result<[u8; 16], NaClError> {
@@ -769,18 +803,19 @@ pub fn box_beforenm<PK: ToPublicKey,
 /// `box_beforenm`.  The two functions together come out to the
 /// same thing as `box_up`.
 pub fn box_afternm(c: &mut[u8], m: &[u8], n: &Nonce, k: &[u8; 32])
-                      -> Result<(), NaClError> {
+                   -> Result<(), NaClError> {
     secretbox(c, m, n, k)
 }
 
 /// An implementation of the NaCl function `crypto_box`, renamed
 /// to `crypto::box_up` because `box` is a keyword in rust.
-pub fn box_up<PK: ToPublicKey, SK: ToSecretKey>(c: &mut[u8], m: &[u8],
-                                                n: &Nonce,
-                                                pk: &PK, sk: &SK)
-              -> Result<(), NaClError> {
+pub fn box_up<N: ToNonce,
+              PK: ToPublicKey,
+              SK: ToSecretKey>(c: &mut[u8], m: &[u8],
+                               n: &N, pk: &PK, sk: &SK)
+                               -> Result<(), NaClError> {
     let k = try!(box_beforenm(pk,sk));
-    box_afternm(c, m, n, &k)
+    box_afternm(c, m, &try!(n.to_nonce()), &k)
 }
 
 /// Decrypt a message using a key that was precomputed using
@@ -793,11 +828,13 @@ pub fn box_open_afternm(m: &mut[u8], c: &[u8], n: &Nonce, k: &[u8; 32])
 
 /// Open a message encrypted with `crypto::box_up`.
 ///
-pub fn box_open<PK: ToPublicKey, SK: ToSecretKey>(m: &mut[u8], c: &[u8], n: &Nonce,
-                                                  pk: &PK, sk: &SK)
-                   -> Result<(), NaClError> {
+pub fn box_open<N: ToNonce,
+                PK: ToPublicKey,
+                SK: ToSecretKey>(m: &mut[u8], c: &[u8],
+                                 n: &N, pk: &PK, sk: &SK)
+                                 -> Result<(), NaClError> {
     let k = try!(box_beforenm(pk,sk));
-    box_open_afternm(m, c, n, &k)
+    box_open_afternm(m, c, &try!(n.to_nonce()), &k)
 }
 
 #[test]
