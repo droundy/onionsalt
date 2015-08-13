@@ -34,8 +34,8 @@
 //! # use onionsalt::crypto;
 //! #
 //! // of course, in practice, don't use unwrap:  handle the error!
-//! let (mypublickey, mysecretkey) = crypto::box_keypair().unwrap();
-//! let (thypublickey, thysecretkey) = crypto::box_keypair().unwrap();
+//! let mykey = crypto::box_keypair().unwrap();
+//! let thykey = crypto::box_keypair().unwrap();
 //!
 //! let plaintext = b"Friendly message.";
 //!
@@ -52,7 +52,7 @@
 //! // that you should strip the 16 zeros off the beginning!
 //!
 //! crypto::box_up(&mut ciphertext, &padded_plaintext,
-//!                &nonce, &thypublickey, &mysecretkey).unwrap();
+//!                &nonce, &thykey.public, &mykey.secret).unwrap();
 //!
 //! let mut decrypted: vec::Vec<u8> = vec::Vec::with_capacity(padded_plaintext.len());
 //! for _ in 0..ciphertext.len() { decrypted.push(0); }
@@ -62,7 +62,7 @@
 //! // how you know that the message was authenticated.
 //!
 //! crypto::box_open(&mut decrypted, &ciphertext,
-//!                  &nonce, &mypublickey, &thysecretkey).unwrap();
+//!                  &nonce, &mykey.public, &thykey.secret).unwrap();
 //!
 //! // Note that decrypted (like padded_plaintext) has 32 bytes of
 //! // zeros padded at the beginning.
@@ -330,7 +330,7 @@ impl std::convert::From<std::io::Error> for NaClError {
 }
 
 /// A public key.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct PublicKey(pub [u8; 32]);
 impl PublicKey {
     pub fn new<T: ToPublicKey>(x: &T) -> Result<PublicKey, NaClError> {
@@ -368,7 +368,7 @@ impl<'a> ToPublicKey for &'a [u8] {
 }
 
 /// A secret key.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct SecretKey(pub [u8; 32]);
 impl SecretKey {
     pub fn new<T: ToSecretKey>(x: &T) -> Result<SecretKey, NaClError> {
@@ -400,7 +400,7 @@ impl<'a> ToSecretKey for &'a [u8] {
 
 /// A nonce.  You should never reuse a nonce for two different
 /// messages between the same set of keys.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Nonce(pub [u8; 32]);
 
 /// A trait that is defined for types that can be used as a nonce.
@@ -831,15 +831,23 @@ fn scalarmult_base(q: &mut[u8], n: &[u8]) {
 
 use rand::{OsRng,Rng};
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct KeyPair {
+    pub public: PublicKey,
+    pub secret: SecretKey,
+}
+pub const EMPTY_PAIR: KeyPair = KeyPair{ public: PublicKey([0;32]),
+                                         secret: SecretKey([0;32]), };
+
 /// Generate a random public/secret key pair.  This is the *only*
 /// way you generate keys.
-pub fn box_keypair() -> Result<(PublicKey, SecretKey), NaClError> {
+pub fn box_keypair() -> Result<KeyPair, NaClError> {
     let mut rng = try!(OsRng::new());
     let mut pk: [u8; 32] = [0; 32];
     let mut sk: [u8; 32] = [0; 32];
     rng.fill_bytes(&mut sk);
     scalarmult_base(&mut pk, &sk);
-    Ok((PublicKey(pk), SecretKey(sk)))
+    Ok(KeyPair{ public: PublicKey(pk), secret: SecretKey(sk) })
 }
 
 /// Securely creates a random nonce.  This function isn't in the
@@ -909,21 +917,21 @@ fn box_works() {
     use std::vec;
 
     let plaintext: &[u8] = b"\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0This is only a test.";
-    let (pk1, sk1) = box_keypair().unwrap();
-    let (pk2, sk2) = box_keypair().unwrap();
+    let k1 = box_keypair().unwrap();
+    let k2 = box_keypair().unwrap();
     let mut ciphertext: vec::Vec<u8> = vec![];
     for _ in 0..plaintext.len() {
         ciphertext.push(0);
     }
     let nonce = Nonce([0; 32]);
-    box_up(&mut ciphertext, plaintext, &nonce, &pk1, &sk2).unwrap();
+    box_up(&mut ciphertext, plaintext, &nonce, &k1.public, &k2.secret).unwrap();
     // There has got to be a better way to allocate an array of
     // zeros with dynamically determined type.
     let mut decrypted: vec::Vec<u8> = vec::Vec::with_capacity(plaintext.len());
     for _ in 0..plaintext.len() {
         decrypted.push(0);
     }
-    box_open(&mut decrypted, &ciphertext, &nonce, &pk2, &sk1).unwrap();
+    box_open(&mut decrypted, &ciphertext, &nonce, &k2.public, &k1.secret).unwrap();
     for i in 0..decrypted.len() {
         assert!(decrypted[i] == plaintext[i])
     }
@@ -1000,14 +1008,14 @@ fn sillybox_works() {
 
     let plaintext: &[u8] = b"\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0This is only a test.";
     let nauth = "This is only".len();
-    let (pk1, sk1) = box_keypair().unwrap();
-    let (pk2, sk2) = box_keypair().unwrap();
+    let k1 = box_keypair().unwrap();
+    let k2 = box_keypair().unwrap();
     let mut ciphertext: vec::Vec<u8> = vec![];
     for _ in 0..plaintext.len() {
         ciphertext.push(0);
     }
     let nonce = Nonce([0; 32]);
-    sillybox(&mut ciphertext, plaintext, nauth, &nonce, &pk1, &sk2).unwrap();
+    sillybox(&mut ciphertext, plaintext, nauth, &nonce, &k1.public, &k2.secret).unwrap();
     // There has got to be a better way to allocate an array of
     // zeros with dynamically determined type.
     let mut decrypted: vec::Vec<u8> = vec::Vec::with_capacity(plaintext.len());
@@ -1015,7 +1023,7 @@ fn sillybox_works() {
         decrypted.push(0);
     }
     sillybox_open(&mut decrypted, &ciphertext, nauth,
-                  &nonce, &pk2, &sk1).unwrap();
+                  &nonce, &k2.public, &k1.secret).unwrap();
     for i in 0..decrypted.len() {
         assert!(decrypted[i] == plaintext[i])
     }
@@ -1024,14 +1032,14 @@ fn sillybox_works() {
     for i in 16..32+nauth {
         ciphertext[i] ^= 1;
         assert!(sillybox_open(&mut decrypted, &ciphertext, nauth,
-                              &nonce, &pk2, &sk1).is_err());
+                              &nonce, &k2.public, &k1.secret).is_err());
         ciphertext[i] ^= 1;
     }
     // Verify that we do not authenticate any of the remaining bytes.
     for i in 32+nauth..ciphertext.len() {
         ciphertext[i] ^= 1;
         assert!(sillybox_open(&mut decrypted, &ciphertext, nauth,
-                              &nonce, &pk2, &sk1).is_ok());
+                              &nonce, &k2.public, &k1.secret).is_ok());
         ciphertext[i] ^= 1;
     }
 }
