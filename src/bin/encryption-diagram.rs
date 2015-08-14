@@ -37,7 +37,7 @@ fn main() {
 
         diagram.annotate(&format!("Message as received"));
         let route = onionbox_open_algorithm(&mut diagram, &pairs[i].secret).unwrap();
-        assert_eq!(route.0, keys_and_routes[i].1);
+        assert_eq!(route, keys_and_routes[i].1);
 
         if i == 2 {
             // We are the recipient!
@@ -45,7 +45,7 @@ fn main() {
             for j in 0..PAYLOAD_LENGTH {
                 response[j] = j as u8;
             }
-            route.1(&mut diagram, &response);
+            onionbox_insert_payload_algorithm(&mut diagram, &response);
         }
 
         let mut f = File::create(&format!("paper/decryption-{}.eps", i)).unwrap();

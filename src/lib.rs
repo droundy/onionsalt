@@ -570,15 +570,11 @@ pub fn onionbox_algorithm<T: bytes::SelfDocumenting>(buffer: &mut T,
     Ok(())
 }
 
-pub type InsertPayload<T: bytes::SelfDocumenting> =
-    Box<Fn(&mut T, &[u8; PAYLOAD_LENGTH])>;
-
 /// The buffer already contains the message, and contains the next message
 /// on exit.
 pub fn onionbox_open_algorithm<T: bytes::SelfDocumenting>(buffer: &mut T,
                                                           secret_key: &crypto::SecretKey)
-                                                          -> Result<([u8; ROUTING_LENGTH],
-                                                                     InsertPayload<T>),
+                                                          -> Result<[u8; ROUTING_LENGTH],
                                                                     crypto::NaClError>
 {
     let pk: &[u8] = &buffer.get_bytes(0, 32);
@@ -606,29 +602,13 @@ pub fn onionbox_open_algorithm<T: bytes::SelfDocumenting>(buffer: &mut T,
     for i in 0..ROUTING_LENGTH {
         route[i] = routevec[i];
     }
-    Ok((route, Box::new(move |b: &mut T, p: &[u8; PAYLOAD_LENGTH]| {
-        insert_payload(b, p, &skey);
-    })))
+    Ok(route)
 }
 
 
-fn insert_payload<T: bytes::SelfDocumenting>(buffer: &mut T,
-                                             payload: &[u8; PAYLOAD_LENGTH],
-                                             skey: &[u8;32]) {
-    let auth_length = (ROUTE_COUNT+1)*ROUTING_OVERHEAD;
-    buffer.move_bytes(0, 32 + ROUTING_LENGTH,
-                      bytes::BUFSIZE - 32 - ROUTING_LENGTH);
-    buffer.annotate(&format!("Shift it back again (how wasteful!)"));
-    buffer.sillybox_afternm(auth_length, &crypto::Nonce([0;32]), skey, "???");
-    buffer.set_bytes(0,32,&[0;32], "0");
-    buffer.annotate(&format!("Encrypt it again with same key"));
-    buffer.set_bytes(bytes::BUFSIZE - PAYLOAD_LENGTH,
-                     PAYLOAD_LENGTH, payload, "New payload");
+pub fn onionbox_insert_payload_algorithm<T: bytes::SelfDocumenting>(buffer: &mut T,
+                                                                    payload: &[u8; PAYLOAD_LENGTH]) {
+    buffer.set_bytes(bytes::BUFSIZE - PAYLOAD_LENGTH - 32 - ROUTING_LENGTH,
+                     PAYLOAD_LENGTH, payload, "Response");
     buffer.annotate(&format!("Add response payload"));
-    buffer.sillybox_afternm(auth_length, &crypto::Nonce([0;32]), skey, "???");
-    buffer.set_bytes(0,32 + ROUTING_LENGTH,&[0;32 + ROUTING_LENGTH], "0");
-    buffer.annotate(&format!("Encrypt it yet again with same key"));
-    buffer.move_bytes(32 + ROUTING_LENGTH, 0,
-                      bytes::BUFSIZE - 32 - ROUTING_LENGTH);
-    buffer.annotate(&format!("Move packet back into position to be transmitted"));
 }

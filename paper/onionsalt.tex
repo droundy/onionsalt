@@ -236,8 +236,6 @@ As in the case of decryption, the NaCl \texttt{crypto\_box} encryption
 routine requires zero padding at the beginning of the message as well
 as at the end, introducing a bit more bookkeeping.
 
-\section{Decryption and responding as recipient}
-
 \begin{figure*}
   \begin{center}
     Router 1\\
@@ -254,6 +252,80 @@ as at the end, introducing a bit more bookkeeping.
   \caption{A diagram of the decryption and responding
     process.}\label{fig:decryption-and-responding}
 \end{figure*}
+
+\section{Decryption and responding as recipient}
+
+The purpose of \emph{not} authenticating the payload is to enable the
+recipient to send a response without giving the recipient any
+information about the sender beyond what is included in the payload.
+Specifically, the recipient cannot determine who the sender is.
+Moreover, no party other than the recipient (which includes the other
+routers, and any network observer) can determine which router is the
+recipient, provided the routers incorporate a fixed (or randomized)
+delay in their forwarding on of the message, such that the recipient
+has time to read the payload and encrypt the response before the
+packet would otherwise be expected to be sent to the following router.
+
+Figure~\ref{fig:decryption-and-responding} shows a cartoon of the
+entire sequence of messages passed between all routers following the
+first one, which was already shown in Fig.~\ref{fig:decryption}.  Note
+that the colored patterns representing encryption with various keys is
+consistend across
+Figs.~\ref{fig:decryption}-\ref{fig:decryption-and-responding},
+representing the encryption of a single onion, followed by transmision
+and decryption through the circuit.
+
+The recipient has a somewhat more convoluted process than would
+otherwise be required to insert the payload, because it is assumed
+that the recipient will not recognize her role as recipient until
+decrypting and reading the routing information, which may be presumed
+to include a flag indicating that she is the recipient, and should
+therefore examine the payload.  An alternative approach that would be
+more resistent to timing attacks---but less resistent to
+denial-of-service (DOS) attacks---would be have each router attempt to
+decrypt the payload to its secret key, and use the authentication of
+that decryption to determine whether they are the recipient.  On the
+whole, this process does not seem warranted, when the routers can
+defeat timing attacks more efficiently by simply sleeping until a
+determined time (e.g. a random interval after receiving the packet, or
+a time specified in the routing information).
+
+The reciever, once she has identified herself as such, can immediately
+examine the payload, which presumably is itself encrypted, and
+certainly must be authenticated.  Having done so, she constructs her
+response, presumably also encrypted and authenticated.  We assume that
+the response payload is encrypted and indistinguishable from random,
+and we therefore simply overwrite the original payload.  This
+encryption is not reflected in the figure, since it is not part of the
+onion salt protocol itself.  One option would be for the recipient to
+encrypt her response to the sender's ephemeral public key using NaCl
+with a different nonce, either a random one, or perhaps a value of 1.
+
+The subsequent routers (routers 3, 4, and 5 in our example) are
+unaware that they are relaying a response rather than the original
+payload.  We presume that the final router is given the sender's
+address.  The sender will decrypt the response by encrypting it (or
+decrypting without authentication) to each of the keys of the routers
+following the recipient.  This will restore the response to what the
+recipient inserted, which can then be decrypted and authenticated.
+
+\section{Extensions}
+
+An obvious extension to this scheme is to enable different routers to
+recieve and respond to different portions of the payload.  To achieve
+this, the routing information would inform each router which
+randomized portion of the payload to read and respond to. This could
+enable collection of information from an entire circuit in one
+message.  The procedure would be essentially identical to the
+single-recipient case, and we will consider it no further in this
+paper.
+
+Another alternative is that the circuit need not return to the
+original sender.  One could either use the protocol to send
+information in just one direction, or the sender could cause the
+recipient to relay information to a third party.  The latter would
+require a second message to inform the third party of the shared
+secrets needed to decrypt the ``response.''
 
 \section{Analysis}
 
