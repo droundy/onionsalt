@@ -15,6 +15,14 @@ if os.getenv('MINIMAL') == None and not os.system('echo -n "# " && cargo --versi
     print()
     print('| target/debug/encryption-diagram')
     print('< target/debug/encryption-diagram')
+    print()
+    for i in range(6):
+        print('| epstopdf paper/decryption-%d.eps' % i)
+        print('< paper/decryption-%d.eps' % i)
+        print()
+    print('| epstopdf paper/encryption.eps')
+    print('< paper/encryption.eps')
+    print()
 else:
     print('# Cargo does not work.  :(')
 

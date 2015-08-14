@@ -8,20 +8,21 @@ use onionsalt::bytes::{SelfDocumenting};
 fn main() {
     let mut diagram = bytes::Diagram::new();
 
-    let k0 = crypto::box_keypair().unwrap();
-    let k1 = crypto::box_keypair().unwrap();
-    let yu = crypto::box_keypair().unwrap();
-    let k3 = crypto::box_keypair().unwrap();
-    let k4 = crypto::box_keypair().unwrap();
-    let k5 = crypto::box_keypair().unwrap();
+    let pairs = [crypto::box_keypair().unwrap(),
+                 crypto::box_keypair().unwrap(),
+                 crypto::box_keypair().unwrap(),
+                 crypto::box_keypair().unwrap(),
+                 crypto::box_keypair().unwrap(),
+                 crypto::box_keypair().unwrap()];
+    let your_key = pairs[2];
 
     let keys_and_routes: [(crypto::PublicKey, [u8; ROUTING_LENGTH]); ROUTE_COUNT]
-                           = [(k0.public, *b"123456789012345612345678"),
-                              (k1.public, *b"my friend is hermy frien"),
-                              (yu.public, *b"address 3 for yoaddress "),
-                              (k3.public, *b"another is - heranother "),
-                              (k4.public, *b"router here is orouter h"),
-                              (k5.public, *b"how to get to mehow to g")];
+                           = [(pairs[0].public, *b"123456789012345612345678"),
+                              (pairs[1].public, *b"my friend is hermy frien"),
+                              (pairs[2].public, *b"address 3 for yoaddress "),
+                              (pairs[3].public, *b"another is - heranother "),
+                              (pairs[4].public, *b"router here is orouter h"),
+                              (pairs[5].public, *b"how to get to mehow to g")];
     let mut payload: [u8; PAYLOAD_LENGTH] = [0; PAYLOAD_LENGTH];
     payload[3] = 3;
     let payload = payload;
@@ -31,21 +32,23 @@ fn main() {
     f.write_all(diagram.postscript().as_bytes()).unwrap();
     // println!("\n\n{}", diagram.asciiart());
 
-    diagram.clear();
+    for i in 0..6 {
+        diagram.clear();
 
-    let route = onionbox_open_algorithm(&mut diagram, &k0.secret).unwrap();
-    assert_eq!(route, keys_and_routes[0].1);
+        diagram.annotate(&format!("Message as received"));
+        let route = onionbox_open_algorithm(&mut diagram, &pairs[i].secret).unwrap();
+        assert_eq!(route.0, keys_and_routes[i].1);
 
-    let mut f = File::create("paper/decryption-0.eps").unwrap();
-    f.write_all(diagram.postscript().as_bytes()).unwrap();
+        if i == 2 {
+            // We are the recipient!
+            let mut response: [u8; PAYLOAD_LENGTH] = [0; PAYLOAD_LENGTH];
+            for j in 0..PAYLOAD_LENGTH {
+                response[j] = j as u8;
+            }
+            route.1(&mut diagram, &response);
+        }
 
-    diagram.clear();
-
-    let route = onionbox_open_algorithm(&mut diagram, &k1.secret).unwrap();
-    assert_eq!(route, keys_and_routes[1].1);
-
-    let mut f = File::create("paper/decryption-1.eps").unwrap();
-    f.write_all(diagram.postscript().as_bytes()).unwrap();
-
-    diagram.clear();
+        let mut f = File::create(&format!("paper/decryption-{}.eps", i)).unwrap();
+        f.write_all(diagram.postscript().as_bytes()).unwrap();
+    }
 }

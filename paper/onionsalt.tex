@@ -107,17 +107,17 @@ modified packet.
     \includegraphics[width=\textwidth]{decryption-0}
   \end{center}
   \caption{A diagram of the decryption process removing one layer of
-    the onion---here the first layer.  The steps are labelled by
-    numbers in circles along the left-hand side. Blocks of memory are
+    the onion---here the first layer.  Blocks of memory are
     represented by rectangles, and as those blocks are encrypted they
     are filled with colored hash lines corresponding to each
-    encryption applied.  In step 1, the sender's public key is
-    extracted, and the message is padded with zeros on the left and
-    before the payload.  In step 2, the message is decrypted, which at
-    the same time encrypts the zero padding in the middle.  Finally,
-    once the routing information $R0$ has been read, the message is
-    truncated to the same size as the original message, and is ready
-    to be passed on.}\label{fig:decryption}
+    encryption applied, which are removed with each decryption.  In
+    step 1, the sender's public key is extracted, and the message is
+    padded with zeros on the left and before the payload.  In step 2,
+    the message is decrypted, which at the same time encrypts the zero
+    padding in the middle.  Finally, once the routing information $R0$
+    has been read, the message is truncated to the same size as the
+    original message, and is ready to be passed
+    on.}\label{fig:decryption}
 \end{figure*}
 
 The \emph{anonymity} of the sender is primarily ensured by generating
@@ -152,7 +152,7 @@ not knowable to any other party.  Then the sender can create
 authentication data for each recipient that authenticates not only the
 actual importand content, but also the padding.
 
-\section{The decryption algorithm}
+\section{Decryption as a router}
 
 I will begin with the decryption algorithm, illustrated in
 Fig.~\ref{fig:decryption}, which is simpler than encryption.
@@ -235,6 +235,25 @@ This process involves:
 As in the case of decryption, the NaCl \texttt{crypto\_box} encryption
 routine requires zero padding at the beginning of the message as well
 as at the end, introducing a bit more bookkeeping.
+
+\section{Decryption and responding as recipient}
+
+\begin{figure*}
+  \begin{center}
+    Router 1\\
+    \includegraphics[width=\textwidth]{decryption-1}
+    Recipient\\
+    \includegraphics[width=\textwidth]{decryption-2}
+    Router 3\\
+    \includegraphics[width=\textwidth]{decryption-3}
+    Router 4\\
+    \includegraphics[width=\textwidth]{decryption-4}
+    Router 5\\
+    \includegraphics[width=\textwidth]{decryption-5}
+  \end{center}
+  \caption{A diagram of the decryption and responding
+    process.}\label{fig:decryption-and-responding}
+\end{figure*}
 
 \section{Analysis}
 

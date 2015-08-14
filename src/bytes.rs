@@ -171,30 +171,9 @@ impl Diagram {
         "%!PS-Adobe-2.0 EPSF-2.0
 %%BoundingBox: -10 -{height} {width} 10
 
-gsave
-  1 0 0 setrgbcolor
-  100 100 moveto
-  200 100 lineto
-  150 150 lineto
-  closepath
-  fill
-grestore
-gsave
-1 0 0 setrgbcolor
-2 setlinewidth
-stroke
-grestore
-
 0 setlinewidth
 
 /Times-Roman 12 selectfont
-100 100 moveto
-(Hello) show
-
-currentpoint pop 100 sub 2 add
-99 99 moveto
-0 rlineto 0 12 rlineto 99 111 lineto
-closepath stroke
 
 /show-ctr {
 gsave
@@ -213,7 +192,7 @@ gsave
     3 -2 roll rmoveto
     gsave
         1 1 1 setrgbcolor
-        2 setlinewidth
+        3 setlinewidth
         dup false charpath flattenpath stroke
     grestore
     show
@@ -305,9 +284,9 @@ grestore
             }
             if b.encryptions.len() > 0 {
                 psnew = psnew + &format!("{} {} {} setrgbcolor\n",
-                                         b.encryptions[b.encryptions.len()-1][2] as f64/512.0,
-                                         b.encryptions[b.encryptions.len()-1][3] as f64/512.0,
-                                         b.encryptions[b.encryptions.len()-1][4] as f64/512.0);
+                                         b.encryptions[b.encryptions.len()-1][2] as f64/1024.0,
+                                         b.encryptions[b.encryptions.len()-1][3] as f64/1024.0,
+                                         b.encryptions[b.encryptions.len()-1][4] as f64/1024.0);
             }
             psnew = psnew + &format!("{} {} ({}) show-ctr grestore\n",
                                      centerx, centery, &b.name);
