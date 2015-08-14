@@ -65,8 +65,7 @@ has the following properties.
   even after intercepting the message received by each router and the
   friend.
 \item[Authenticity] Each recipient can determine that the message
-  received was not modified in any way, with the exception of the
-  \emph{payload}, which must be separately authenticated.
+  received was not modified in any way.
 \item[Anonymity] No recipient can determine from the content of the
   message they received the identity of any other party involved,
   except for the routing information they may have been provided.  Of
@@ -84,41 +83,11 @@ these properties.
 
 \emph{Secrecy} and \emph{authenticity}are at the core of any secure
 communication scheme.  These are the two properties provided by the
-NaCl \verb!crypto_box! function which we use.  However, we actually
-use a modified version, which does \emph{not} authenticate the payload
-content.  This is needed in order to enable the recipient to place
-information in the payload to be relayed on.
-
-The authenticity property as we implement it eliminates any potential
-attackes that involve cleverly modifying an intercepted message
-(e.g. flipping a few specific bits) and observing the resulting
-behavior of its recipient, and ultimately compromising the secrecy of
-the message.  A simpler approach would separately authenticate to each
-router just the routing information for that router.  However, this
-would leave open an attack in which one compromised router communicates with a
-later compromised router in the sequence by modifying a few bits of
-its routing information, enabling it to identify packets that match.
-By having each router authenticate \emph{all} the routing information,
-an intermediate uncompromised router would refuse to relay on such a
-modified packet.
-
-\begin{figure*}
-  \begin{center}
-    \includegraphics[width=\textwidth]{decryption-0}
-  \end{center}
-  \caption{A diagram of the decryption process removing one layer of
-    the onion---here the first layer.  The steps are labelled by
-    numbers in circles along the left-hand side. Blocks of memory are
-    represented by rectangles, and as those blocks are encrypted they
-    are filled with colored hash lines corresponding to each
-    encryption applied.  In step 1, the sender's public key is
-    extracted, and the message is padded with zeros on the left and
-    before the payload.  In step 2, the message is decrypted, which at
-    the same time encrypts the zero padding in the middle.  Finally,
-    once the routing information $R0$ has been read, the message is
-    truncated to the same size as the original message, and is ready
-    to be passed on.}\label{fig:decryption}
-\end{figure*}
+NaCl \verb!crypto_box! function which we use. The authenticity
+property eliminates any potential attackes that involve cleverly
+modifying an intercepted message (e.g. flipping a few specific bits)
+and observing the resulting behavior of its recipient, and ultimately
+compromising the secrecy of the message.
 
 The \emph{anonymity} of the sender is primarily ensured by generating
 random key pairs for each recipient and transmitting the generated
@@ -133,6 +102,24 @@ traffic analysis attacks.  Naturally, if a user's threat model
 includes an observer of network patterns, then additional care care
 (e.g. batching or random delays in transmission) should be used to
 protect against traffic analysis attacks.
+
+\begin{figure*}
+  \begin{center}
+    \vspace{-6em}
+    \includegraphics[width=\textwidth]{onion-decryption}
+    \vspace{-9em}
+  \end{center}
+  \caption{A diagram of the decryption process removing one layer of
+    the onion.  The steps are labelled by numbers in circles along the
+    left-hand side. Blocks of memory are represented by rectangles,
+    and as those blocks are encrypted they are given nested colored
+    layers corresponding to each encryption applied.  In step 1, the
+    message is padded with zeros on right and left.  In step 2, the
+    message is decrypted, which at the same time encrypts the zero
+    padding at the end.  Finally, once the routing information $a_i$
+    is read, the message is truncated to the same size as the original
+    message, and is ready to be passed on.}\label{fig:decryption}
+\end{figure*}
 
 Finally, \emph{ordering ambiguity} while not strictly necessary,
 provides an additional measure of protection of anonymity in the
@@ -155,32 +142,35 @@ actual importand content, but also the padding.
 \section{The decryption algorithm}
 
 I will begin with the decryption algorithm, illustrated in
-Fig.~\ref{fig:decryption}, which is simpler than encryption.
+Fig.~\ref{fig:decryption}, which is much simpler than encryption.
 Decryption consists of just three steps.
 \begin{enumerate}
-\item First the public key (which occupies the first 32 bytes) is
-  removed from the message.  The message is then padded at the
-  beginning with 16 bytes of zeros (as required by
-  \verb!crypto_box_open!), and just before the payload with 48 bytes
-  plus the size of the routing information.
-\item The padded message is passed to a modified version of the NaCl
-  function \verb!crypto_box_open! with a zero nonce, which decrypts
-  and authenticates all but the final payload portion of the message,
-  in the process encrypting the zero padding that was inserted in the
-  middle.  We note that in practice we modify the TweetNaCl
-  implementation for simplicity~\cite{bernstein2014tweetnacl}.
+\item First the public key (which
+  occupies the first 32 bytes) is removed from the message.  The message
+  is then padded at the beginning with 16 bytes of zeros (as required by
+  \verb!crypto_box_open!), and at the end with 48 bytes plus the size of
+  the routing information.
+\item The padded message is passed to the NaCl function
+  \verb!crypto_box_open! with a zero nonce, which decrypts and
+  authenticates the message, in the process encrypting the zero
+  padding at the end.  We note that in practice we use the TweetNaCl
+  implementation, for simplicity of
+  building~\cite{bernstein2014tweetnacl}.
 \item Finally, the routing information is read and stripped off,
   leaving a message of the same size as the original, padded with
-  pseudorandom data in the center.
+  pseudorandom data.
 \end{enumerate}
 One unusual feature of this scheme is the the \emph{ciphertext} is
-padded with zeros in its interior prior to decryption and
-authentication.  Also unusual is that our authentication does not
-apply to the final portion of the message.
+padded prior to decryption and authentication.  This enables the
+simple use of the NaCl decryption routine, which simultaneously
+decrypts the message authenticates it, and pads it with pseudorandom
+data.
 
 \begin{figure*}
   \begin{center}
-    \includegraphics[width=\textwidth]{encryption}
+    \vspace{-3em}
+    \includegraphics[width=\textwidth]{onion-encryption}
+    \vspace{-10em}
   \end{center}
   \caption{A diagram of the encryption process, for a three-layer
     onion.  The steps are labelled by numbers in circles along the

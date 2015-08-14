@@ -1,6 +1,9 @@
 extern crate onionsalt;
 
 use onionsalt::*;
+use std::fs::File;
+use std::io::prelude::*;
+use onionsalt::bytes::{SelfDocumenting};
 
 fn main() {
     let mut diagram = bytes::Diagram::new();
@@ -23,6 +26,26 @@ fn main() {
     payload[3] = 3;
     let payload = payload;
     onionbox_algorithm(&mut diagram, &keys_and_routes, &payload, 2);
-    println!("{}", diagram.postscript());
+
+    let mut f = File::create("paper/encryption.eps").unwrap();
+    f.write_all(diagram.postscript().as_bytes()).unwrap();
     // println!("\n\n{}", diagram.asciiart());
+
+    diagram.clear();
+
+    let route = onionbox_open_algorithm(&mut diagram, &k0.secret).unwrap();
+    assert_eq!(route, keys_and_routes[0].1);
+
+    let mut f = File::create("paper/decryption-0.eps").unwrap();
+    f.write_all(diagram.postscript().as_bytes()).unwrap();
+
+    diagram.clear();
+
+    let route = onionbox_open_algorithm(&mut diagram, &k1.secret).unwrap();
+    assert_eq!(route, keys_and_routes[1].1);
+
+    let mut f = File::create("paper/decryption-1.eps").unwrap();
+    f.write_all(diagram.postscript().as_bytes()).unwrap();
+
+    diagram.clear();
 }

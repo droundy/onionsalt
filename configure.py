@@ -11,7 +11,10 @@ if os.getenv('MINIMAL') == None and not os.system('echo -n "# " && cargo --versi
     print('c .log')
     print('c .tum')
     print('c .test')
+    print('C paper')
     print()
+    print('| target/debug/encryption-diagram')
+    print('< target/debug/encryption-diagram')
 else:
     print('# Cargo does not work.  :(')
 

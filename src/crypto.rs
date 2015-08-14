@@ -366,6 +366,18 @@ impl<'a> ToPublicKey for &'a [u8] {
         Ok(PublicKey(k))
     }
 }
+impl ToPublicKey for [u8] {
+    fn to_public_key(&self) -> Result<PublicKey, NaClError> {
+        if self.len() < 32 {
+            return Err(NaClError::InvalidInput);
+        }
+        let mut k = [0; 32];
+        for i in 0..32 {
+            k[i] = self[i];
+        }
+        Ok(PublicKey(k))
+    }
+}
 
 /// A secret key.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -864,9 +876,9 @@ pub fn random_nonce() -> Result<Nonce, NaClError> {
 /// This is useful if you want to handle many messages between the
 /// same two recipients, since it allows you to do the public-key
 /// business just once.
-pub fn box_beforenm<PK: ToPublicKey,
-                    SK: ToSecretKey>(pk: &PK, sk: &SK)
-                                     -> Result<[u8; 32], NaClError> {
+pub fn box_beforenm<PK: ToPublicKey + ?Sized,
+                    SK: ToSecretKey + ?Sized>(pk: &PK, sk: &SK)
+                                              -> Result<[u8; 32], NaClError> {
     let x = try!(sk.to_secret_key());
     let y = try!(pk.to_public_key());
     let mut s: [u8; 32] = [0; 32];
@@ -941,9 +953,9 @@ fn box_works() {
 /// This is useful if you want to handle many messages between the
 /// same two recipients, since it allows you to do the public-key
 /// business just once.
-pub fn sillybox_beforenm<PK: ToPublicKey,
-                    SK: ToSecretKey>(pk: &PK, sk: &SK)
-                                     -> Result<[u8; 32], NaClError> {
+pub fn sillybox_beforenm<PK: ToPublicKey + ?Sized,
+                         SK: ToSecretKey + ?Sized>(pk: &PK, sk: &SK)
+                                                   -> Result<[u8; 32], NaClError> {
     let x = try!(sk.to_secret_key());
     let y = try!(pk.to_public_key());
     let mut s: [u8; 32] = [0; 32];

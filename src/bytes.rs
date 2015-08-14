@@ -1,6 +1,6 @@
 pub const PACKET_LENGTH: usize = 1024;
 
-pub const BUFSIZE: usize = PACKET_LENGTH + 16 + super::ROUTING_OVERHEAD;
+pub const BUFSIZE: usize = PACKET_LENGTH + 16 - 32 + super::ROUTING_OVERHEAD;
 
 use super::crypto;
 
@@ -10,9 +10,9 @@ pub trait SelfDocumenting {
     fn sillybox_afternm(&mut self, auth_length: usize, n: &crypto::Nonce,
                         key: &[u8; 32], name: &str);
     fn sillybox_open_afternm(&mut self, auth_length: usize, n: &crypto::Nonce,
-                             key: &[u8; 32], name: &str)
+                             key: &[u8; 32])
                              -> Result<(), crypto::NaClError>;
-    fn get_bytes(&mut self, from: usize, length: usize) -> Box<[u8]>;
+    fn get_bytes(&mut self, from: usize, length: usize) -> Vec<u8>;
 
     fn annotate(&mut self, message: &str);
     fn clear(&mut self);
@@ -49,11 +49,11 @@ impl SelfDocumenting for [u8; BUFSIZE] {
         unimplemented!();
     }
     fn sillybox_open_afternm(&mut self, auth_length: usize, n: &crypto::Nonce,
-                             key: &[u8; 32], name: &str)
+                             key: &[u8; 32])
                              -> Result<(), crypto::NaClError> {
         unimplemented!();
     }
-    fn get_bytes(&mut self, from: usize, length: usize) -> Box<[u8]> {
+    fn get_bytes(&mut self, from: usize, length: usize) -> Vec<u8> {
         unimplemented!();
     }
 }
@@ -74,6 +74,7 @@ struct Block {
     name: String,
     encryptions: Vec<[u8; 32]>,
     encryption_names: Vec<String>,
+    bytes: Vec<u8>,
 }
 
 impl Block {
@@ -81,7 +82,9 @@ impl Block {
         let mut left = self.clone();
         let mut right = self.clone();
         left.length = at;
+        left.bytes = Vec::from(&left.bytes[..at]);
         right.length -= at;
+        right.bytes = Vec::from(&right.bytes[at..]);
         if right.oldx >= 0 {
             right.oldx += at as isize;
         }
@@ -95,6 +98,7 @@ impl Block {
             name: "0".into(),
             encryptions: Vec::new(),
             encryption_names: Vec::new(),
+            bytes: vec![0; length],
         }
     }
 }
@@ -144,11 +148,7 @@ fn split3(blocks: &[Block], from: usize, length: usize)
 impl Diagram {
     pub fn new() -> Diagram {
         let mut x = Diagram {
-            blocks: vec![Block{ length: BUFSIZE,
-                                oldx: 0,
-                                name: "0".into(),
-                                encryption_names: Vec::new(),
-                                encryptions: Vec::new()}],
+            blocks: vec![Block::zeros(BUFSIZE)],
             postscript: String::new(),
             postscript_height: 0,
             asciiart: String::new(),
@@ -286,7 +286,7 @@ grestore
                                          k[2] as f64/256.0,
                                          k[3] as f64/256.0,
                                          k[4] as f64/256.0);
-                psnew = psnew + &format!("{} setlinewidth\n", kindex as f64/6.0);
+                psnew = psnew + &format!("{} setlinewidth\n", kindex as f64/4.0);
                 let teenyx = -(k[1] as f64)/256.0;
                 let angle = (k[0] as f64 - 128.0)/128.0 * 0.8; // not quite pi/2
                 let dx = rheight as f64 * angle.tan();
@@ -387,6 +387,7 @@ impl SelfDocumenting for Diagram {
             length: length,
             encryptions: Vec::new(),
             encryption_names: Vec::new(),
+            bytes: Vec::from(bytes),
         });
         self.blocks.extend(after);
         assert_eq!(self.len(), BUFSIZE);
@@ -408,19 +409,48 @@ impl SelfDocumenting for Diagram {
             }
         }
         assert!(self.len() == BUFSIZE);
-        self.set_bytes(16,16,&[0;16], &format!("A{}", name));
+        self.set_bytes(16,16,&key[0..16], &format!("A{}", name));
         self.set_bytes(0,16,&[0;16], "0");
         self.blocks[1].encryptions.push(*key);
         self.blocks[1].encryption_names.push(name.into());
         assert!(self.len() == BUFSIZE);
     }
     fn sillybox_open_afternm(&mut self, auth_length: usize, n: &crypto::Nonce,
-                             key: &[u8; 32], name: &str)
+                             key: &[u8; 32])
                              -> Result<(), crypto::NaClError> {
-        unimplemented!();
+        if self.blocks.len() < 2 {
+            return Err(crypto::NaClError::AuthFailed);
+        }
+        if self.blocks[1].encryptions != vec![*key] {
+            return Err(crypto::NaClError::AuthFailed);
+        }
+        self.blocks[1].encryptions = Vec::new();
+        let name = self.blocks[1].encryption_names[0].clone();
+        self.blocks[1].encryption_names = Vec::new();
+        let auth: &[u8] = &self.get_bytes(16, 16);
+        for i in 0..16 {
+            if auth[i] != key[i] {
+                return Err(crypto::NaClError::AuthFailed);
+            }
+        }
+        self.sillybox_afternm(auth_length, n, key, &name);
+        self.set_bytes(0,32,&[0;32], "0");
+        Ok(())
     }
-    fn get_bytes(&mut self, from: usize, length: usize) -> Box<[u8]> {
-        unimplemented!();
+    fn get_bytes(&mut self, from: usize, length: usize) -> Vec<u8> {
+        let mut x = 0;
+        let mut blocklocations = Vec::new();
+        for i in 0..self.blocks.len() {
+            if x == from && length == self.blocks[i].length && self.blocks[i].encryptions.len() == 0 {
+                let bytes = self.blocks[i].bytes.clone();
+                self.set_bytes(from, length, &vec![0; length], "0");
+                return bytes;
+            }
+            blocklocations.push((x, self.blocks[i].length));
+            x += self.blocks[i].length;
+        }
+        panic!("I am disturbed by the bytes you seek. {} and {}\n{:?}",
+               from, length, blocklocations);
     }
 
     fn annotate(&mut self, message: &str) {
@@ -428,6 +458,6 @@ impl SelfDocumenting for Diagram {
         self.display(message);
     }
     fn clear(&mut self) {
-        self.postscript = String::new();
+        self.postscript_reset();
     }
 }

@@ -5,6 +5,7 @@
 *.blg
 *.log
 *.pdf
+*.eps
 *Notes.bib
 
 *.o
