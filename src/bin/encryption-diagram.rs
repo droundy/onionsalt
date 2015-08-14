@@ -23,6 +23,6 @@ fn main() {
     payload[3] = 3;
     let payload = payload;
     onionbox_algorithm(&mut diagram, &keys_and_routes, &payload, 2);
-    println!("PS: {}", diagram.postscript());
-    println!("\n\n{}", diagram.asciiart());
+    println!("{}", diagram.postscript());
+    // println!("\n\n{}", diagram.asciiart());
 }

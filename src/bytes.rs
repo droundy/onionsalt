@@ -1,4 +1,6 @@
-pub const BUFSIZE: usize = 1024 - 32 + 16 + super::ROUTING_OVERHEAD;
+pub const PACKET_LENGTH: usize = 1024;
+
+pub const BUFSIZE: usize = PACKET_LENGTH + 16 + super::ROUTING_OVERHEAD;
 
 use super::crypto;
 
@@ -61,6 +63,7 @@ pub struct Diagram {
     blocks: Vec<Block>,
     old: Vec<Block>,
     postscript: String,
+    postscript_height: isize,
     asciiart: String,
 }
 
@@ -124,8 +127,6 @@ fn split2(blocks: &[Block], at: usize) -> (Vec<Block>, Vec<Block>) {
 }
 fn split3(blocks: &[Block], from: usize, length: usize)
               -> (Vec<Block>, Vec<Block>, Vec<Block>) {
-    println!("Splitting size {} at {} and {}", blockslen(blocks),
-             from, from+length);
     assert!(blockslen(blocks) >= from+length);
     let (before, later) = split2(blocks, from);
     let (inside, after) = split2(&later, length);
@@ -138,7 +139,7 @@ fn split3(blocks: &[Block], from: usize, length: usize)
 
 impl Diagram {
     pub fn new() -> Diagram {
-        let x = Diagram {
+        let mut x = Diagram {
             blocks: vec![Block{ length: BUFSIZE,
                                 name: "0".into(),
                                 encryption_names: Vec::new(),
@@ -147,27 +148,134 @@ impl Diagram {
                              name: "0".into(),
                              encryption_names: Vec::new(),
                              encryptions: Vec::new()}],
-            postscript: Diagram::postscript_header(),
+            postscript: String::new(),
+            postscript_height: 0,
             asciiart: String::new(),
         };
+        x.postscript_reset();
         assert_eq!(x.len(), BUFSIZE);
         x
     }
     pub fn postscript(&self) -> String {
-        self.postscript.clone()
+        self.postscript_header() + &self.postscript
     }
     pub fn asciiart(&self) -> String {
         self.asciiart.clone()
     }
-    fn postscript_header() -> String {
-        "PS header".into()
+    fn postscript_reset(&mut self) {
+        self.postscript = String::new();
+        self.postscript_height = 10;
     }
-    fn display(&mut self) {
-        self.postscript = self.postscript.clone() + &format!("{:?}\n", self.blocks);
+    fn postscript_header(&self) -> String {
+        "%!PS-Adobe-2.0 EPSF-2.0
+%%BoundingBox: -10 -{height} {width} 10
 
+gsave
+  1 0 0 setrgbcolor
+  100 100 moveto
+  200 100 lineto
+  150 150 lineto
+  closepath
+  fill
+grestore
+gsave
+1 0 0 setrgbcolor
+2 setlinewidth
+stroke
+grestore
+
+0 setlinewidth
+
+/Times-Roman 12 selectfont
+100 100 moveto
+(Hello) show
+
+currentpoint pop 100 sub 2 add
+99 99 moveto
+0 rlineto 0 12 rlineto 99 111 lineto
+closepath stroke
+
+/show-ctr {
+gsave
+    ( ) = (start) stack pop
+    newpath 0 0 moveto
+    dup false charpath flattenpath pathbbox
+    ( ) = (pathbbox) stack pop
+    exch
+    3 -2 roll
+    add -2 div
+    3 -2 roll
+    add -2 div
+    exch
+    ( ) = (moving) stack pop
+    moveto
+    3 -2 roll rmoveto
+    gsave
+        1 1 1 setrgbcolor
+        2 setlinewidth
+        dup false charpath flattenpath stroke
+    grestore
+    show
+grestore
+} def
+
+/r {
+  rectstroke
+} def
+
+"           .replace("{height}", &format!("{}", self.postscript_height))
+            .replace("{width}", &format!("{}", BUFSIZE+10))
+    }
+    fn display(&mut self, annotation: &str) {
+        let dy = 72/2;
+        let rheight = dy/2;
+        self.postscript_height += dy;
+        let mut psnew = String::new();
         let mut ascii = String::new();
         let mut x = 0;
+
+        let y = self.postscript_height - 10;
+        psnew = psnew + &format!("{} {} ({}) show-ctr\n",
+                                 BUFSIZE/2, -y + rheight + (dy-rheight)/2, annotation);
         for b in self.blocks.iter() {
+            let thickness = 4;
+            let centerx = (x + b.length/2) as isize;
+            let centery = -y + rheight/2;
+            psnew = psnew + &format!("gsave {} {} {} {} 4 copy r rectclip\n",
+            //psnew = psnew + &format!("gsave {} {} {} {} r\n",
+                                     x as isize +thickness, -y,
+                                     b.length as isize -thickness, rheight);
+            for kindex in 0..b.encryptions.len() {
+                let k = b.encryptions[kindex];
+                psnew = psnew + &format!("{} {} {} setrgbcolor\n",
+                                         k[2] as f64/256.0,
+                                         k[3] as f64/256.0,
+                                         k[4] as f64/256.0);
+                psnew = psnew + &format!("{} setlinewidth\n", kindex as f64/6.0);
+                let teenyx = -(k[1] as f64)/256.0;
+                let angle = (k[0] as f64 - 128.0)/128.0 * 0.8; // not quite pi/2
+                let dx = rheight as f64 * angle.tan();
+                let w = rheight as f64 /6.0;
+                let xshift = w  / angle.cos();
+                let nfirst = if dx < 0.0 { 0 } else { - (dx / xshift) as isize - 1 };
+                let nlast = (b.length as f64/xshift) as isize + 1
+                    + if dx > 0.0 { 0 } else { - (dx / xshift) as isize + 1 };
+                psnew = psnew + &format!("newpath {} {} moveto {} {{\n",
+                                         x as f64 + nfirst as f64*xshift + teenyx, -y,
+                                         // x as f64 + nfirst as f64 * xshift, y,
+                                         nlast - nfirst);
+                psnew = psnew + &format!("  {} {} rlineto {} {} rmoveto\n",
+                                         dx, rheight, -dx + xshift, -rheight);
+                psnew = psnew + &format!("}} repeat stroke\n");
+            }
+            if b.encryptions.len() > 0 {
+                psnew = psnew + &format!("{} {} {} setrgbcolor\n",
+                                         b.encryptions[b.encryptions.len()-1][2] as f64/512.0,
+                                         b.encryptions[b.encryptions.len()-1][3] as f64/512.0,
+                                         b.encryptions[b.encryptions.len()-1][4] as f64/512.0);
+            }
+            psnew = psnew + &format!("{} {} ({}) show-ctr grestore\n",
+                                     centerx, centery, &b.name);
             if b.encryptions.len() > 0 {
                 ascii = ascii + &format!("{:❁^1$.1$}|", &b.name, b.length/8-1);
             } else {
@@ -177,6 +285,8 @@ impl Diagram {
         }
         ascii.push('\n');
         self.asciiart = self.asciiart.clone() + &ascii;
+        self.postscript = self.postscript.clone() + &psnew;
+
         self.old = self.blocks.clone();
     }
     pub fn len(&self) -> usize {
@@ -255,7 +365,8 @@ impl SelfDocumenting for Diagram {
             }
         }
         assert!(self.len() == BUFSIZE);
-        self.set_bytes(16,16,&[0;16], &format!("A({})", name));
+        self.set_bytes(16,16,&[0;16], &format!("A{}", name));
+        self.set_bytes(0,16,&[0;16], "0");
         assert!(self.len() == BUFSIZE);
     }
     fn sillybox_open_afternm(&mut self, auth_length: usize, n: &crypto::Nonce,
@@ -269,9 +380,9 @@ impl SelfDocumenting for Diagram {
 
     fn annotate(&mut self, message: &str) {
         self.asciiart = format!("{}\n{}\n\n", self.asciiart, message);
-        self.display();
+        self.display(message);
     }
     fn clear(&mut self) {
-        self.postscript = Diagram::postscript_header();
+        self.postscript = String::new();
     }
 }

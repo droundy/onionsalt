@@ -484,6 +484,8 @@ pub fn onionbox_algorithm<T: bytes::SelfDocumenting>(buffer: &mut T,
         return Err(crypto::NaClError::InvalidInput);
     }
 
+    assert_eq!(PACKET_LENGTH, bytes::PACKET_LENGTH);
+    assert_eq!(PACKET_LENGTH, ROUTE_COUNT*ROUTING_OVERHEAD + PAYLOAD_LENGTH);
     assert_eq!(16 + (ROUTE_COUNT+1)*ROUTING_OVERHEAD + PAYLOAD_LENGTH,
                bytes::BUFSIZE);
     // We always use a zero nonce.
@@ -504,16 +506,18 @@ pub fn onionbox_algorithm<T: bytes::SelfDocumenting>(buffer: &mut T,
 
     let total_routing_length = ROUTE_COUNT*ROUTING_OVERHEAD;
     let auth_length = total_routing_length + ROUTING_OVERHEAD;
+    buffer.annotate(&format!("Starting with buffer of zeros."));
+
     for i in 0..ROUTE_COUNT {
         buffer.sillybox_afternm(auth_length, &nonce, &skeys[i],
-                                &format!("key {}", i));
+                                &format!("{}", i));
         buffer.annotate(&format!("Encrypting to key {}", i));
         buffer.set_bytes(0, 32, &[0;32], "0");
-        buffer.move_bytes(bytes::BUFSIZE - PAYLOAD_LENGTH - ROUTE_COUNT*ROUTING_OVERHEAD,
-                          bytes::BUFSIZE - PAYLOAD_LENGTH - (ROUTE_COUNT+1)*ROUTING_OVERHEAD,
-                          ROUTE_COUNT*ROUTING_OVERHEAD);
+        buffer.move_bytes(bytes::BUFSIZE - PAYLOAD_LENGTH - (ROUTE_COUNT-1)*ROUTING_OVERHEAD,
+                          bytes::BUFSIZE - PAYLOAD_LENGTH - ROUTE_COUNT*ROUTING_OVERHEAD,
+                          (ROUTE_COUNT-1)*ROUTING_OVERHEAD);
         buffer.annotate(&format!("Shifting left routing bytes to {}",
-                                 bytes::BUFSIZE - PAYLOAD_LENGTH - (ROUTE_COUNT+1)*ROUTING_OVERHEAD));
+                                 bytes::BUFSIZE - PAYLOAD_LENGTH - ROUTE_COUNT*ROUTING_OVERHEAD));
     }
     // At this stage, plaintext should be set up for the innermost
     // layer of the onion, although offset by a ROUTING_OVERHEAD.
@@ -521,16 +525,16 @@ pub fn onionbox_algorithm<T: bytes::SelfDocumenting>(buffer: &mut T,
     for i in (0..ROUTE_COUNT).rev() {
         // Move into place the portion of the routing information
         // which has already been encrypted.
-        buffer.move_bytes(bytes::BUFSIZE - PAYLOAD_LENGTH - (ROUTE_COUNT+1)*ROUTING_OVERHEAD,
-                          bytes::BUFSIZE - PAYLOAD_LENGTH - ROUTE_COUNT*ROUTING_OVERHEAD,
-                          ROUTE_COUNT*ROUTING_OVERHEAD);
+        buffer.move_bytes(bytes::BUFSIZE - PAYLOAD_LENGTH - ROUTE_COUNT*ROUTING_OVERHEAD,
+                          bytes::BUFSIZE - PAYLOAD_LENGTH - (ROUTE_COUNT-1)*ROUTING_OVERHEAD,
+                          (ROUTE_COUNT-1)*ROUTING_OVERHEAD);
         buffer.annotate(&format!("Shifting right routing info"));
         // Now we add the routing info!
         buffer.set_bytes(32, ROUTING_LENGTH, &keys_and_routings[i].1,
                          &format!("R{}", i) );
         // Add the public key we are using for the encryption.
         buffer.set_bytes(32+ROUTING_LENGTH, 32, &my_keypairs[i+1].public.0,
-                         &format!("P{}", i));
+                         &format!("P{}", i+1));
         buffer.annotate(&format!("Adding routing info for {}", i));
         // Add the payload if it is the right time.
         if i == payload_recipient {
@@ -541,11 +545,18 @@ pub fn onionbox_algorithm<T: bytes::SelfDocumenting>(buffer: &mut T,
         // Now we encrypt the plaintext, which expands it by
         // AUTHENTICATIONBYTES.
         buffer.sillybox_afternm(auth_length, &nonce, &skeys[i],
-                                &format!("key {}", i));
+                                &format!("{}", i));
         buffer.annotate(&format!("Encrypting to key {}", i));
         // for j in auth_length-ROUTING_OVERHEAD .. auth_length {
         //     assert!(ciphertext[j] == 0);
         // }
     }
+    buffer.move_bytes(16, 32, ROUTE_COUNT*ROUTING_OVERHEAD);
+    buffer.move_bytes(bytes::BUFSIZE-PAYLOAD_LENGTH,
+                      32+ROUTE_COUNT*ROUTING_OVERHEAD,
+                      PAYLOAD_LENGTH);
+    buffer.annotate(&format!("Putting packet into place"));
+    buffer.set_bytes(0, 32, &my_keypairs[0].public.0, "P0");
+    buffer.annotate(&format!("Adding one last public key"));
     Ok(())
 }
