@@ -513,9 +513,9 @@ pub fn onionbox_algorithm<T: bytes::SelfDocumenting>(buffer: &mut T,
                                 &format!("{}", i));
         buffer.annotate(&format!("Encrypting to key {}", i));
         buffer.set_bytes(0, 32, &[0;32], "0");
-        buffer.move_bytes(bytes::BUFSIZE - PAYLOAD_LENGTH - (ROUTE_COUNT-1)*ROUTING_OVERHEAD,
-                          bytes::BUFSIZE - PAYLOAD_LENGTH - ROUTE_COUNT*ROUTING_OVERHEAD,
-                          (ROUTE_COUNT-1)*ROUTING_OVERHEAD);
+        buffer.move_bytes(bytes::BUFSIZE - PAYLOAD_LENGTH - ROUTE_COUNT*ROUTING_OVERHEAD,
+                          bytes::BUFSIZE - PAYLOAD_LENGTH - (ROUTE_COUNT+1)*ROUTING_OVERHEAD,
+                          ROUTE_COUNT*ROUTING_OVERHEAD);
         buffer.annotate(&format!("Shifting left routing bytes to {}",
                                  bytes::BUFSIZE - PAYLOAD_LENGTH - ROUTE_COUNT*ROUTING_OVERHEAD));
     }
@@ -525,9 +525,9 @@ pub fn onionbox_algorithm<T: bytes::SelfDocumenting>(buffer: &mut T,
     for i in (0..ROUTE_COUNT).rev() {
         // Move into place the portion of the routing information
         // which has already been encrypted.
-        buffer.move_bytes(bytes::BUFSIZE - PAYLOAD_LENGTH - ROUTE_COUNT*ROUTING_OVERHEAD,
-                          bytes::BUFSIZE - PAYLOAD_LENGTH - (ROUTE_COUNT-1)*ROUTING_OVERHEAD,
-                          (ROUTE_COUNT-1)*ROUTING_OVERHEAD);
+        buffer.move_bytes(bytes::BUFSIZE - PAYLOAD_LENGTH - (ROUTE_COUNT+1)*ROUTING_OVERHEAD,
+                          bytes::BUFSIZE - PAYLOAD_LENGTH - ROUTE_COUNT*ROUTING_OVERHEAD,
+                          ROUTE_COUNT*ROUTING_OVERHEAD);
         buffer.annotate(&format!("Shifting right routing info"));
         // Now we add the routing info!
         buffer.set_bytes(32, ROUTING_LENGTH, &keys_and_routings[i].1,

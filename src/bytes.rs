@@ -61,7 +61,6 @@ impl SelfDocumenting for [u8; BUFSIZE] {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Diagram {
     blocks: Vec<Block>,
-    old: Vec<Block>,
     postscript: String,
     postscript_height: isize,
     asciiart: String,
@@ -71,6 +70,7 @@ pub struct Diagram {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 struct Block {
     length: usize,
+    oldx: isize,
     name: String,
     encryptions: Vec<[u8; 32]>,
     encryption_names: Vec<String>,
@@ -82,12 +82,16 @@ impl Block {
         let mut right = self.clone();
         left.length = at;
         right.length -= at;
+        if right.oldx >= 0 {
+            right.oldx += at as isize;
+        }
         assert_eq!(left.length + right.length, self.length);
         (left, right)
     }
     fn zeros(length: usize) -> Block {
         Block {
             length: length,
+            oldx: -1,
             name: "0".into(),
             encryptions: Vec::new(),
             encryption_names: Vec::new(),
@@ -141,13 +145,10 @@ impl Diagram {
     pub fn new() -> Diagram {
         let mut x = Diagram {
             blocks: vec![Block{ length: BUFSIZE,
+                                oldx: 0,
                                 name: "0".into(),
                                 encryption_names: Vec::new(),
                                 encryptions: Vec::new()}],
-            old: vec![Block{ length: BUFSIZE,
-                             name: "0".into(),
-                             encryption_names: Vec::new(),
-                             encryptions: Vec::new()}],
             postscript: String::new(),
             postscript_height: 0,
             asciiart: String::new(),
@@ -235,16 +236,50 @@ grestore
         let mut x = 0;
 
         let y = self.postscript_height - 10;
-        psnew = psnew + &format!("{} {} ({}) show-ctr\n",
-                                 BUFSIZE/2, -y + rheight + (dy-rheight)/2, annotation);
         for b in self.blocks.iter() {
-            let thickness = 4;
+            let thickness = 1;
             let centerx = (x + b.length/2) as isize;
             let centery = -y + rheight/2;
+            if b.oldx != x as isize && b.oldx >= 0 {
+                psnew = psnew + &format!("gsave 0 setlinewidth\n");
+                psnew = psnew + &format!("gsave 0.5 setgray\n");
+                psnew = psnew + &format!("{} {} moveto {} {} lineto stroke\n",
+                                         x as isize + thickness,
+                                         -y + rheight,
+                                         b.oldx + thickness,
+                                         -y + dy);
+                psnew = psnew + &format!("{} {} moveto {} {} lineto stroke\n",
+                                         (x + b.length) as isize - thickness,
+                                         -y + rheight,
+                                         b.oldx + b.length as isize - thickness,
+                                         -y + dy);
+                psnew = psnew + &format!("grestore\n");
+            } else if b.oldx == -1 && b.name != "0" {
+                let braceheight = rheight + (dy-rheight)/2;
+                psnew = psnew + &format!("gsave\n");
+                psnew = psnew + &format!("{} {} moveto\n",
+                                         x as isize + thickness,
+                                         -y + rheight);
+                psnew = psnew + &format!("{} {} {} {} {} {} curveto\n",
+                                         x as isize + thickness,
+                                         -y + braceheight,
+                                         x + b.length/2,
+                                         -y + rheight - (braceheight-rheight)/2,
+                                         x + b.length/2,
+                                         -y + (braceheight*3/4+rheight/4));
+                psnew = psnew + &format!("{} {} {} {} {} {} curveto\n",
+                                         x + b.length/2,
+                                         -y + rheight - (braceheight-rheight)/2,
+                                         (x + b.length) as isize - thickness,
+                                         -y + braceheight,
+                                         (x + b.length) as isize - thickness,
+                                         -y + rheight);
+                psnew = psnew + &format!("stroke grestore\n");
+            }
             psnew = psnew + &format!("gsave {} {} {} {} 4 copy r rectclip\n",
             //psnew = psnew + &format!("gsave {} {} {} {} r\n",
                                      x as isize +thickness, -y,
-                                     b.length as isize -thickness, rheight);
+                                     b.length as isize -2*thickness, rheight);
             for kindex in 0..b.encryptions.len() {
                 let k = b.encryptions[kindex];
                 psnew = psnew + &format!("{} {} {} setrgbcolor\n",
@@ -283,11 +318,18 @@ grestore
             }
             x += b.length;
         }
+        psnew = psnew + &format!("{} {} ({}) show-ctr\n",
+                                 BUFSIZE/2, -y + rheight + (dy-rheight)/2, annotation);
+
         ascii.push('\n');
         self.asciiart = self.asciiart.clone() + &ascii;
         self.postscript = self.postscript.clone() + &psnew;
 
-        self.old = self.blocks.clone();
+        x = 0;
+        for i in 0 .. self.blocks.len() {
+            self.blocks[i].oldx = x as isize;
+            x += self.blocks[i].length;
+        }
     }
     pub fn len(&self) -> usize {
         let mut tot = 0;
@@ -341,6 +383,7 @@ impl SelfDocumenting for Diagram {
         self.blocks = before;
         self.blocks.push(Block {
             name: name.into(),
+            oldx: -1,
             length: length,
             encryptions: Vec::new(),
             encryption_names: Vec::new(),
@@ -367,6 +410,8 @@ impl SelfDocumenting for Diagram {
         assert!(self.len() == BUFSIZE);
         self.set_bytes(16,16,&[0;16], &format!("A{}", name));
         self.set_bytes(0,16,&[0;16], "0");
+        self.blocks[1].encryptions.push(*key);
+        self.blocks[1].encryption_names.push(name.into());
         assert!(self.len() == BUFSIZE);
     }
     fn sillybox_open_afternm(&mut self, auth_length: usize, n: &crypto::Nonce,
