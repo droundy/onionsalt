@@ -81,6 +81,9 @@
 
 #![deny(warnings)]
 
+#[cfg(test)]
+extern crate quickcheck;
+
 extern crate rand;
 
 pub mod crypto;
@@ -707,4 +710,64 @@ fn check_onionbox_on_buffer() {
         //     onionbox_insert_payload_algorithm(&mut buffer, &response);
         // }
     }
+}
+
+#[test]
+fn test_onionbox_auth() {
+    use crypto::KeyPair;
+    fn f(data: Vec<u8>,
+         payload_recipient: usize,
+         pairs : (KeyPair,KeyPair,KeyPair,KeyPair,KeyPair,KeyPair))
+         -> quickcheck::TestResult {
+        if data.len() == 0 {
+            return quickcheck::TestResult::discard();
+        }
+
+        let payload_recipient = payload_recipient % ROUTE_COUNT;
+
+        let mut buffer = [0; bytes::BUFSIZE];
+
+        let pairs = [pairs.0, pairs.1, pairs.2, pairs.3, pairs.4, pairs.5];
+        let keys_and_routes: [(crypto::PublicKey, [u8; ROUTING_LENGTH]); ROUTE_COUNT]
+            = [(pairs[0].public, *b"123456789012345612345678"),
+               (pairs[1].public, *b"my friend is hermy frien"),
+               (pairs[2].public, *b"address 3 for yoaddress "),
+               (pairs[3].public, *b"another is - heranother "),
+               (pairs[4].public, *b"router here is orouter h"),
+               (pairs[5].public, *b"how to get to mehow to g")];
+        let mut payload: [u8; PAYLOAD_LENGTH] = [0; PAYLOAD_LENGTH];
+        for i in 0..PAYLOAD_LENGTH {
+            payload[i] = data[i % data.len()];
+        }
+        payload[3] = 3;
+        let payload = payload;
+        onionbox_algorithm(&mut buffer, &keys_and_routes, &payload, payload_recipient).unwrap();
+
+        for i in 0..6 {
+            let route = onionbox_open_algorithm(&mut buffer, &pairs[i].secret).unwrap();
+            if route != keys_and_routes[i].1 {
+                return quickcheck::TestResult::error(
+                    format!("route[{}] {:?} != {:?}", i, route, keys_and_routes[i].1));
+            }
+
+            if i == payload_recipient {
+                // We are the recipient!
+                let mut response: [u8; PAYLOAD_LENGTH] = [0; PAYLOAD_LENGTH];
+                for j in 0..PAYLOAD_LENGTH {
+                    response[j] = j as u8;
+                    if buffer[PACKET_LENGTH - PAYLOAD_LENGTH + j] != payload[j] {
+                        return quickcheck::TestResult::error(
+                            format!("Response {:?} != {:?}",
+                                    &buffer[PACKET_LENGTH - PAYLOAD_LENGTH + j],
+                                    &payload[j]));
+                    }
+                }
+                onionbox_insert_payload_algorithm(&mut buffer, &response);
+            }
+        }
+        quickcheck::TestResult::passed()
+    }
+    quickcheck::quickcheck(f as fn(Vec<u8>, usize,
+                                   (KeyPair, KeyPair, KeyPair,
+                                    KeyPair, KeyPair, KeyPair)) -> quickcheck::TestResult);
 }
