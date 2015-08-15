@@ -1,3 +1,5 @@
+#![deny(warnings)]
+
 extern crate onionsalt;
 
 use onionsalt::*;
@@ -5,6 +7,7 @@ use std::fs::File;
 use std::io::prelude::*;
 use onionsalt::bytes::{SelfDocumenting};
 
+#[allow(dead_code)]
 fn main() {
     let mut diagram = bytes::Diagram::new();
 
@@ -14,7 +17,6 @@ fn main() {
                  crypto::box_keypair().unwrap(),
                  crypto::box_keypair().unwrap(),
                  crypto::box_keypair().unwrap()];
-    let your_key = pairs[2];
 
     let keys_and_routes: [(crypto::PublicKey, [u8; ROUTING_LENGTH]); ROUTE_COUNT]
                            = [(pairs[0].public, *b"123456789012345612345678"),
@@ -26,7 +28,7 @@ fn main() {
     let mut payload: [u8; PAYLOAD_LENGTH] = [0; PAYLOAD_LENGTH];
     payload[3] = 3;
     let payload = payload;
-    onionbox_algorithm(&mut diagram, &keys_and_routes, &payload, 2);
+    onionbox_algorithm(&mut diagram, &keys_and_routes, &payload, 2).unwrap();
 
     let mut f = File::create("paper/encryption.eps").unwrap();
     f.write_all(diagram.postscript().as_bytes()).unwrap();

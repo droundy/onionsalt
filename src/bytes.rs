@@ -1,8 +1,12 @@
+#![deny(warnings)]
+
 pub const PACKET_LENGTH: usize = 1024;
 
 pub const BUFSIZE: usize = PACKET_LENGTH + 16 - 32 + super::ROUTING_OVERHEAD;
 
 use super::crypto;
+
+const PRINT_BYTES: usize = 1024;
 
 pub trait SelfDocumenting {
     fn move_bytes(&mut self, from: usize, to: usize, length: usize);
@@ -20,12 +24,30 @@ pub trait SelfDocumenting {
 
 impl SelfDocumenting for [u8; BUFSIZE] {
     fn annotate(&mut self, message: &str) {
+        if false {
+            print!("{}:\n    ", message);
+            for i in 0..PRINT_BYTES {
+                if i % 16 == 0 {
+                    print!(" ");
+                }
+                print!("{:02x}", self[i]);
+            }
+            println!("");
+        }
     }
     fn clear(&mut self) {
     }
     fn move_bytes(&mut self, from: usize, to: usize, length: usize) {
-        if to < from || from+length < to {
+        if to < from {
             // non-overlapping or overlapping the right way
+            for i in 0..length {
+                self[to+i] = self[from+i];
+            }
+            for i in if from < to + length { to + length } else { from } .. from + length {
+                self[i] = 0;
+            }
+        } else if from + length < to {
+            // non-overlapping
             for i in 0..length {
                 self[to+i] = self[from+i];
                 self[from+i] = 0;
@@ -34,27 +56,70 @@ impl SelfDocumenting for [u8; BUFSIZE] {
             // go backwards
             for i in (0..length).rev() {
                 self[to+i] = self[from+i];
-                self[from+i] = 0;
+            }
+            for i in from .. to {
+                self[i] = 0;
             }
         }
     }
     fn set_bytes(&mut self, to: usize, length: usize, bytes: &[u8], _name: &str) {
         assert!(length == bytes.len());
         for i in 0..length {
-            self[i] = bytes[i];
+            self[to+i] = bytes[i];
         }
     }
     fn sillybox_afternm(&mut self, auth_length: usize, n: &crypto::Nonce,
-                        key: &[u8; 32], name: &str) {
-        unimplemented!();
+                        key: &[u8; 32], _name: &str) {
+        let mut ciphertext = [0; BUFSIZE];
+        // print!("Encrypting:\n    ");
+        // for i in 0..auth_length {
+        //     if i % 16 == 0 {
+        //         print!(" ");
+        //     }
+        //     print!("{:02x}", self[i]);
+        // }
+        // println!("");
+        crypto::sillybox_afternm(&mut ciphertext, self, auth_length, n, key).unwrap();
+        *self = ciphertext;
+        // print!("Encrypted to: ({})\n    ", auth_length);
+        // for i in 0..auth_length {
+        //     if i % 16 == 0 {
+        //         print!(" ");
+        //     }
+        //     print!("{:02x}", self[i]);
+        // }
+        // println!("");
     }
     fn sillybox_open_afternm(&mut self, auth_length: usize, n: &crypto::Nonce,
                              key: &[u8; 32])
                              -> Result<(), crypto::NaClError> {
-        unimplemented!();
+        let mut plaintext = [0; BUFSIZE];
+        // print!("Decrypting: ({})\n    ", auth_length);
+        // for i in 0..auth_length {
+        //     if i % 16 == 0 {
+        //         print!(" ");
+        //     }
+        //     print!("{:02x}", self[i]);
+        // }
+        // println!("");
+        let out = crypto::sillybox_open_afternm(&mut plaintext, self, auth_length, n, key);
+        *self = plaintext;
+        // print!("Decrypted to:\n    ");
+        // for i in 0..auth_length {
+        //     if i % 16 == 0 {
+        //         print!(" ");
+        //     }
+        //     print!("{:02x}", self[i]);
+        // }
+        // println!("");
+        out
     }
     fn get_bytes(&mut self, from: usize, length: usize) -> Vec<u8> {
-        unimplemented!();
+        let out = Vec::from(&self[from .. from + length]);
+        for i in from .. from+length {
+            self[i] = 0;
+        }
+        out
     }
 }
 
@@ -323,7 +388,7 @@ impl SelfDocumenting for Diagram {
     fn move_bytes(&mut self, from: usize, to: usize, length: usize) {
         if from + length < to {
             let (pre, moved, middle_) = split3(&self.blocks, from, length);
-            let (middle, gone, rest) = split3(&middle_, to-from-length, length);
+            let (middle, _gone, rest) = split3(&middle_, to-from-length, length);
             self.blocks = pre;
             self.blocks.push(Block::zeros(length));
             self.blocks.extend(middle);
@@ -331,20 +396,20 @@ impl SelfDocumenting for Diagram {
             self.blocks.extend(rest);
         } else if from < to {
             let (pre, moved, gone_) = split3(&self.blocks, from, length);
-            let (gone, rest) = split2(&gone_, to-from);
+            let (_gone, rest) = split2(&gone_, to-from);
             self.blocks = pre;
             self.blocks.push(Block::zeros(to-from));
             self.blocks.extend(moved);
             self.blocks.extend(rest);
         } else if from < to + length {
-            let (pre, gone, moved_) = split3(&self.blocks, to, from-to);
+            let (pre, _gone, moved_) = split3(&self.blocks, to, from-to);
             let (moved, rest) = split2(&moved_, length);
             self.blocks = pre;
             self.blocks.extend(moved);
             self.blocks.push(Block::zeros(from-to));
             self.blocks.extend(rest);
         } else {
-            let (pre, gone, middle_) = split3(&self.blocks, to, length);
+            let (pre, _gone, middle_) = split3(&self.blocks, to, length);
             let (middle, moved, rest) = split3(&middle_, from-to-length, length);
             self.blocks = pre;
             self.blocks.extend(moved);
@@ -371,7 +436,7 @@ impl SelfDocumenting for Diagram {
         self.blocks.extend(after);
         assert_eq!(self.len(), BUFSIZE);
     }
-    fn sillybox_afternm(&mut self, auth_length: usize, n: &crypto::Nonce,
+    fn sillybox_afternm(&mut self, _auth_length: usize, _n: &crypto::Nonce,
                         key: &[u8; 32], name: &str) {
         for i in 0..self.blocks.len() {
             if self.blocks[i].encryptions.contains(key) {

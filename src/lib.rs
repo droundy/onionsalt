@@ -79,6 +79,7 @@
 //! }
 //! ` x` d`
 
+#![deny(warnings)]
 
 extern crate rand;
 
@@ -99,6 +100,8 @@ pub const ROUTING_OVERHEAD: usize = ROUTING_LENGTH + OVERHEADBYTES;
 
 pub const ROUTE_COUNT: usize = 6;
 
+pub const AUTH_LENGTH: usize = (ROUTE_COUNT+1)*ROUTING_OVERHEAD - AUTHENTICATIONBYTES - 32;
+
 /// PACKET_LENGTH is the size that we actually send to each recipient.
 pub const PACKET_LENGTH: usize =
     bytes::BUFSIZE - 16 + 32 - ROUTING_OVERHEAD;
@@ -109,7 +112,6 @@ pub const PACKET_LENGTH: usize =
 pub const PAYLOAD_LENGTH: usize = PACKET_LENGTH - ROUTE_COUNT*ROUTING_OVERHEAD;
 
 use std::vec::Vec;
-use crypto::ToPublicKey;
 
 pub struct OnionBox {
     keys: Vec<[u8; 32]>,
@@ -171,13 +173,12 @@ pub fn onionbox(keys_and_routings: &[(crypto::PublicKey, [u8; ROUTING_LENGTH]);
     }
 
     let total_routing_length = ROUTE_COUNT*(ROUTING_LENGTH+OVERHEADBYTES);
-    let auth_length = total_routing_length + layer_overhead;
     for i in 0..ROUTE_COUNT {
         for j in 32..total_routing_length {
             plaintext[j] = ciphertext[j+layer_overhead];
         }
         try!(crypto::sillybox_afternm(&mut ciphertext, &plaintext,
-                                      auth_length,
+                                      AUTH_LENGTH,
                                       &nonce, &skeys[i]));
     }
     // At this stage, plaintext should be set up for the innermost
@@ -211,7 +212,7 @@ pub fn onionbox(keys_and_routings: &[(crypto::PublicKey, [u8; ROUTING_LENGTH]);
         }
         // Now we encrypt the plaintext, which expands it by
         // AUTHENTICATIONBYTES.
-        try!(crypto::sillybox_afternm(&mut ciphertext, &plaintext, auth_length,
+        try!(crypto::sillybox_afternm(&mut ciphertext, &plaintext, AUTH_LENGTH,
                                       &nonce, &skeys[i]));
         {
             let mut cc = String::new();
@@ -229,7 +230,7 @@ pub fn onionbox(keys_and_routings: &[(crypto::PublicKey, [u8; ROUTING_LENGTH]);
             }
             println!("{}", &cc);
         }
-        for j in auth_length-layer_overhead .. auth_length {
+        for j in AUTH_LENGTH-layer_overhead .. AUTH_LENGTH {
             assert!(ciphertext[j] == 0);
         }
     }
@@ -243,7 +244,7 @@ pub fn onionbox(keys_and_routings: &[(crypto::PublicKey, [u8; ROUTING_LENGTH]);
     }
     for j in 0..PAYLOAD_LENGTH {
         output.packet[total_routing_length+j] =
-            ciphertext[32+auth_length+j];
+            ciphertext[32+AUTH_LENGTH+j];
     }
     println!("cb_length {} and message_length {}", cb_length, encrypted_length+32);
     Ok(output)
@@ -505,12 +506,10 @@ pub fn onionbox_algorithm<T: bytes::SelfDocumenting>(buffer: &mut T,
                                                   &my_keypairs[i].secret));
     }
 
-    let total_routing_length = ROUTE_COUNT*ROUTING_OVERHEAD;
-    let auth_length = total_routing_length + ROUTING_OVERHEAD;
     buffer.annotate(&format!("Starting with buffer of zeros."));
 
     for i in 0..ROUTE_COUNT {
-        buffer.sillybox_afternm(auth_length, &nonce, &skeys[i],
+        buffer.sillybox_afternm(AUTH_LENGTH, &nonce, &skeys[i],
                                 &format!("{}", i));
         buffer.annotate(&format!("Encrypting to key {}", i));
         buffer.set_bytes(0, 32, &[0;32], "0");
@@ -553,7 +552,7 @@ pub fn onionbox_algorithm<T: bytes::SelfDocumenting>(buffer: &mut T,
         }
         // Now we encrypt the plaintext, which expands it by
         // AUTHENTICATIONBYTES.
-        buffer.sillybox_afternm(auth_length, &nonce, &skeys[i],
+        buffer.sillybox_afternm(AUTH_LENGTH, &nonce, &skeys[i],
                                 &format!("{}", i));
         buffer.annotate(&format!("Encrypting to key {}", i));
         // for j in auth_length-ROUTING_OVERHEAD .. auth_length {
@@ -578,21 +577,23 @@ pub fn onionbox_open_algorithm<T: bytes::SelfDocumenting>(buffer: &mut T,
                                                                     crypto::NaClError>
 {
     let pk: &[u8] = &buffer.get_bytes(0, 32);
+    buffer.annotate(&format!("Extract ephemeral public key"));
     buffer.move_bytes(ROUTE_COUNT*ROUTING_OVERHEAD,
                       bytes::BUFSIZE-PAYLOAD_LENGTH,
                       PAYLOAD_LENGTH);
+    buffer.annotate(&format!("Move payload to the right"));
     buffer.move_bytes(32, 16, ROUTE_COUNT*ROUTING_OVERHEAD);
+    buffer.annotate(&format!("Move routing 16 bytes to the left"));
     // the following is only to beautify the picture, since the bytes
     // are already zero.
-    buffer.set_bytes(bytes::BUFSIZE-PAYLOAD_LENGTH-ROUTING_OVERHEAD,
-                     ROUTING_OVERHEAD,
-                     &vec![0;ROUTING_OVERHEAD],
-                     "0");
+    // buffer.set_bytes(bytes::BUFSIZE-PAYLOAD_LENGTH-ROUTING_OVERHEAD,
+    //                  ROUTING_OVERHEAD,
+    //                  &[0;ROUTING_OVERHEAD],
+    //                  "0");
     buffer.annotate(&format!("Extract the public key and insert zeros"));
 
-    let auth_length = (ROUTE_COUNT+1)*ROUTING_OVERHEAD;
     let skey = try!(crypto::sillybox_beforenm(pk, secret_key));
-    try!(buffer.sillybox_open_afternm(auth_length, &crypto::Nonce([0;32]), &skey));
+    try!(buffer.sillybox_open_afternm(AUTH_LENGTH, &crypto::Nonce([0;32]), &skey));
     buffer.annotate(&format!("Decrypting with our secret key"));
     let routevec = buffer.get_bytes(32, ROUTING_LENGTH);
     buffer.move_bytes(32+ROUTING_LENGTH,
@@ -611,4 +612,99 @@ pub fn onionbox_insert_payload_algorithm<T: bytes::SelfDocumenting>(buffer: &mut
     buffer.set_bytes(bytes::BUFSIZE - PAYLOAD_LENGTH - 32 - ROUTING_LENGTH,
                      PAYLOAD_LENGTH, payload, "Response");
     buffer.annotate(&format!("Add response payload"));
+}
+
+#[cfg(test)]
+#[test]
+fn check_onionbox_on_diagram() {
+    use bytes::{SelfDocumenting};
+
+    let mut diagram = bytes::Diagram::new();
+
+    let pairs = [crypto::box_keypair().unwrap(),
+                 crypto::box_keypair().unwrap(),
+                 crypto::box_keypair().unwrap(),
+                 crypto::box_keypair().unwrap(),
+                 crypto::box_keypair().unwrap(),
+                 crypto::box_keypair().unwrap()];
+
+    let keys_and_routes: [(crypto::PublicKey, [u8; ROUTING_LENGTH]); ROUTE_COUNT]
+                           = [(pairs[0].public, *b"123456789012345612345678"),
+                              (pairs[1].public, *b"my friend is hermy frien"),
+                              (pairs[2].public, *b"address 3 for yoaddress "),
+                              (pairs[3].public, *b"another is - heranother "),
+                              (pairs[4].public, *b"router here is orouter h"),
+                              (pairs[5].public, *b"how to get to mehow to g")];
+    let mut payload: [u8; PAYLOAD_LENGTH] = [0; PAYLOAD_LENGTH];
+    payload[3] = 3;
+    let payload = payload;
+    onionbox_algorithm(&mut diagram, &keys_and_routes, &payload, 2).unwrap();
+
+    println!("{}", diagram.postscript());
+
+    for i in 0..6 {
+        diagram.clear();
+
+        diagram.annotate(&format!("Message as received"));
+        let route = onionbox_open_algorithm(&mut diagram, &pairs[i].secret).unwrap();
+        assert_eq!(route, keys_and_routes[i].1);
+
+        if i == 2 {
+            // We are the recipient!
+            let mut response: [u8; PAYLOAD_LENGTH] = [0; PAYLOAD_LENGTH];
+            for j in 0..PAYLOAD_LENGTH {
+                response[j] = j as u8;
+            }
+            onionbox_insert_payload_algorithm(&mut diagram, &response);
+        }
+
+        println!("{}", diagram.postscript());
+    }
+}
+
+#[cfg(test)]
+#[test]
+fn check_onionbox_on_buffer() {
+    use bytes::{SelfDocumenting};
+
+    let mut buffer = [0; bytes::BUFSIZE];
+
+    let pairs = [crypto::box_keypair().unwrap(),
+                 crypto::box_keypair().unwrap(),
+                 crypto::box_keypair().unwrap(),
+                 crypto::box_keypair().unwrap(),
+                 crypto::box_keypair().unwrap(),
+                 crypto::box_keypair().unwrap()];
+
+    let keys_and_routes: [(crypto::PublicKey, [u8; ROUTING_LENGTH]); ROUTE_COUNT]
+                           = [(pairs[0].public, *b"123456789012345612345678"),
+                              (pairs[1].public, *b"my friend is hermy frien"),
+                              (pairs[2].public, *b"address 3 for yoaddress "),
+                              (pairs[3].public, *b"another is - heranother "),
+                              (pairs[4].public, *b"router here is orouter h"),
+                              (pairs[5].public, *b"how to get to mehow to g")];
+    let mut payload: [u8; PAYLOAD_LENGTH] = [0; PAYLOAD_LENGTH];
+    payload[3] = 3;
+    let payload = payload;
+    onionbox_algorithm(&mut buffer, &keys_and_routes, &payload, 2).unwrap();
+
+    for i in 0..6 {
+        buffer.clear();
+
+        buffer.annotate(&format!("Message as received by {}", i));
+        let route = onionbox_open_algorithm(&mut buffer, &pairs[i].secret).unwrap();
+        println!("route should be {}", String::from_utf8_lossy(&keys_and_routes[i].1));
+        println!("route is actually {}", String::from_utf8_lossy(&route));
+        assert_eq!(route, keys_and_routes[i].1);
+
+        // if i == 2 {
+        //     // We are the recipient!
+        //     let mut response: [u8; PAYLOAD_LENGTH] = [0; PAYLOAD_LENGTH];
+        //     for j in 0..PAYLOAD_LENGTH {
+        //         response[j] = j as u8;
+        //         assert_eq!(buffer[bytes::BUFSIZE - PAYLOAD_LENGTH + j], payload[j])
+        //     }
+        //     onionbox_insert_payload_algorithm(&mut buffer, &response);
+        // }
+    }
 }

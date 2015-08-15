@@ -74,6 +74,8 @@
 #![deny(warnings)]
 
 use std::num::Wrapping;
+use std::fmt::{Formatter, Error, Display};
+
 fn unwrap<T>(x: Wrapping<T>) -> T {
     let Wrapping(x) = x;
     x
@@ -337,6 +339,20 @@ impl PublicKey {
         return x.to_public_key()
     }
 }
+impl Display for PublicKey {
+    fn fmt(&self, f: &mut Formatter) -> Result<(), Error> {
+        let mut s = String::new();
+        s = s + &format!("{:02x}{:02x}{:02x}{:02x}", self.0[0], self.0[1], self.0[2], self.0[3]);
+        s = s + &format!("{:02x}{:02x}{:02x}{:02x}", self.0[4], self.0[5], self.0[6], self.0[7]);
+        s = s + &format!("{:02x}{:02x}{:02x}{:02x}", self.0[8], self.0[9], self.0[10], self.0[11]);
+        s = s + &format!("{:02x}{:02x}{:02x}{:02x}", self.0[12], self.0[13], self.0[14], self.0[15]);
+        s = s + &format!("{:02x}{:02x}{:02x}{:02x}", self.0[16], self.0[17], self.0[18], self.0[19]);
+        s = s + &format!("{:02x}{:02x}{:02x}{:02x}", self.0[20], self.0[21], self.0[22], self.0[23]);
+        s = s + &format!("{:02x}{:02x}{:02x}{:02x}", self.0[24], self.0[25], self.0[26], self.0[27]);
+        s = s + &format!("{:02x}{:02x}{:02x}{:02x}", self.0[28], self.0[29], self.0[30], self.0[31]);
+        f.write_str(&s)
+    }
+}
 
 /// A trait that is defined for types that can be used as a public
 /// key.  Specifically, [u8; 32], &[u8] (with possible crash on the
@@ -387,6 +403,11 @@ impl SecretKey {
         return x.to_secret_key()
     }
 }
+impl Display for SecretKey {
+    fn fmt(&self, f: &mut Formatter) -> Result<(), Error> {
+        PublicKey(self.0).fmt(f)
+    }
+}
 
 /// A trait that is defined for types that can be used as a secret
 /// key.  Specifically, [u8; 32], &[u8] (with possible crash on the
@@ -414,6 +435,11 @@ impl<'a> ToSecretKey for &'a [u8] {
 /// messages between the same set of keys.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Nonce(pub [u8; 32]);
+impl Display for Nonce {
+    fn fmt(&self, f: &mut Formatter) -> Result<(), Error> {
+        PublicKey(self.0).fmt(f)
+    }
+}
 
 /// A trait that is defined for types that can be used as a nonce.
 /// Specifically, [u8; 32], &[u8] (with possible crash on the wrong
@@ -622,9 +648,7 @@ pub fn funnybox_open(m: &mut[u8], c: &[u8], nauth: usize, n: &Nonce, k: &[u8])
     if m.len() as u64 != d || nauth > d as usize - 32 || d < 32 {
         return Err(NaClError::InvalidInput);
     }
-    println!("About to stream_32");
     let x = try!(stream_32(n,k));
-    println!("About to verify");
     try!(onetimeauth_verify(&c[16..],&c[32..32+nauth],&x));
     try!(stream_xor(m,c,d,n,k));
     for i in 0..32 {
@@ -1052,6 +1076,49 @@ fn sillybox_works() {
         ciphertext[i] ^= 1;
         assert!(sillybox_open(&mut decrypted, &ciphertext, nauth,
                               &nonce, &k2.public, &k1.secret).is_ok());
+        ciphertext[i] ^= 1;
+    }
+}
+
+#[test]
+fn sillybox_afternm_works() {
+    use std::vec;
+
+    let plaintext: &[u8] = b"\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0This is only a test.";
+    let nauth = "This is only".len();
+    let k1 = box_keypair().unwrap();
+    let k2 = box_keypair().unwrap();
+    let mut ciphertext: vec::Vec<u8> = vec![];
+    for _ in 0..plaintext.len() {
+        ciphertext.push(0);
+    }
+    let nonce = Nonce([0; 32]);
+    let sk = sillybox_beforenm(&k1.public, &k2.secret).unwrap();
+    sillybox_afternm(&mut ciphertext, plaintext, nauth, &nonce, &sk).unwrap();
+    // There has got to be a better way to allocate an array of
+    // zeros with dynamically determined type.
+    let mut decrypted: vec::Vec<u8> = vec::Vec::with_capacity(plaintext.len());
+    for _ in 0..plaintext.len() {
+        decrypted.push(0);
+    }
+    sillybox_open_afternm(&mut decrypted, &ciphertext, nauth,
+                          &nonce, &sk).unwrap();
+    for i in 0..decrypted.len() {
+        assert!(decrypted[i] == plaintext[i])
+    }
+
+    // Verify that we authenticate the first nauth bytes.
+    for i in 16..32+nauth {
+        ciphertext[i] ^= 1;
+        assert!(sillybox_open_afternm(&mut decrypted, &ciphertext, nauth,
+                                      &nonce, &sk).is_err());
+        ciphertext[i] ^= 1;
+    }
+    // Verify that we do not authenticate any of the remaining bytes.
+    for i in 32+nauth..ciphertext.len() {
+        ciphertext[i] ^= 1;
+        assert!(sillybox_open_afternm(&mut decrypted, &ciphertext, nauth,
+                                      &nonce, &sk).is_ok());
         ciphertext[i] ^= 1;
     }
 }
