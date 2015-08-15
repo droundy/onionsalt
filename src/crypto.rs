@@ -73,6 +73,9 @@
 
 #![deny(warnings)]
 
+#[cfg(test)]
+extern crate quickcheck;
+
 use std::num::Wrapping;
 use std::fmt::{Formatter, Error, Display};
 
@@ -1378,4 +1381,207 @@ fn hash_works() {
               b"01c756b7c20b5f95fd2b079ab6a50f28b946fb16266b07c6060945dc4fe9e0d279c5b1505b9ec7d8f8f3c9ebf0c5ee9365aec08cf278d65b64daeccc19d3cbf4");
     test_hash(b"c2963342cfaa88ccd102a258e6d629f6b0d367dd55116502ca4451ea523623bc4175819a0648df3168e8ea8f10ed27354807d76e02ee1fdf1c9c655ee2b9fd08d557058dabdf8dcf964bfcacc996ae173971e26ea038d407c824260d06c2848a04a488c4c456dbcde2939e561ab908c4097b508638d6cda556465c9cc5",
               b"a4d2f59393a5fea612c3c745f4bb9f41aaf3a3ce1679aa8afc1a62baa4ed452819418c8ae1a1e658757976692390fc43d4decf7d855cd8b498b6dc60cae05a90");
+}
+
+
+#[test]
+fn funnybox_unfunnybox_auth() {
+    fn f(data: Vec<u8>, k: SecretKey, authlen: usize, whichbyte: usize) -> quickcheck::TestResult {
+        let n = random_nonce().unwrap();
+        if data.len() == 0 {
+            return quickcheck::TestResult::discard();
+        }
+        if authlen == 0 || authlen > data.len() {
+            return quickcheck::TestResult::discard();
+        }
+        let mut padded_data = vec![0;32];
+        padded_data.extend(data.clone());
+        let mut ciphertext = vec![0;padded_data.len()];
+        funnybox(&mut ciphertext, &padded_data, authlen, &n, &k.0).unwrap();
+        for i in 0..padded_data.len() {
+            padded_data[i] = 0; // no cheating!
+        }
+        ciphertext[32 + whichbyte % authlen] ^= 1;
+        quickcheck::TestResult::from_bool(funnybox_open(&mut padded_data, &ciphertext,
+                                                        authlen, &n, &k.0).is_err())
+    }
+    quickcheck::quickcheck(f as fn(Vec<u8>, SecretKey, usize, usize) -> quickcheck::TestResult);
+}
+
+#[test]
+fn funnybox_unfunnybox_works() {
+    fn f(data: Vec<u8>, authlen: usize, whichbyte: usize) -> quickcheck::TestResult {
+        let n = random_nonce().unwrap();
+        let k = SecretKey([0;32]);
+        if data.len() == 0 {
+            return quickcheck::TestResult::discard();
+        }
+        if authlen == 0 || authlen >= data.len() {
+            return quickcheck::TestResult::discard();
+        }
+        let mut padded_data = vec![0;32];
+        padded_data.extend(data.clone());
+        let mut ciphertext = vec![0;padded_data.len()];
+        funnybox(&mut ciphertext, &padded_data, authlen, &n, &k.0).unwrap();
+        for i in 0..padded_data.len() {
+            padded_data[i] = 0; // no cheating!
+        }
+        ciphertext[32 + authlen + whichbyte % (data.len()-authlen)] ^= 1;
+        if funnybox_open(&mut padded_data, &ciphertext,
+                         authlen, &n, &k.0).is_err() {
+            return quickcheck::TestResult::error("it failed");
+        }
+        for i in 0..data.len() {
+            if i != authlen + whichbyte % (data.len()-authlen) {
+                if data[i] != padded_data[32+i] {
+                    return quickcheck::TestResult::error(format!("{} != {} at {}",
+                                                                 data[i], padded_data[32+i],
+                                                                 i));
+                }
+            }
+        }
+        quickcheck::TestResult::passed()
+    }
+    quickcheck::quickcheck(f as fn(Vec<u8>, usize, usize) -> quickcheck::TestResult);
+}
+
+#[test]
+fn secretbox_unsecretbox() {
+    fn f(data: Vec<u8>, n: Nonce, k: SecretKey) {
+        let mut padded_data = vec![0;32];
+        padded_data.extend(data.clone());
+        let mut ciphertext = vec![0;padded_data.len()];
+        secretbox(&mut ciphertext, &padded_data, &n, &k.0).unwrap();
+        for i in 0..padded_data.len() {
+            padded_data[i] = 0; // no cheating!
+        }
+        secretbox_open(&mut padded_data, &ciphertext, &n, &k.0).unwrap();
+        for i in 0..data.len() {
+            assert_eq!(data[i], padded_data[32+i]);
+        }
+    }
+    quickcheck::quickcheck(f as fn(Vec<u8>, Nonce, SecretKey));
+}
+
+#[test]
+fn secretbox_unsecretbox_auth() {
+    fn f(data: Vec<u8>, n: Nonce, k: SecretKey, whichbyte: usize) -> quickcheck::TestResult {
+        if data.len() == 0 {
+            return quickcheck::TestResult::discard();
+        }
+        let mut padded_data = vec![0;32];
+        padded_data.extend(data.clone());
+        let mut ciphertext = vec![0;padded_data.len()];
+        secretbox(&mut ciphertext, &padded_data, &n, &k.0).unwrap();
+        for i in 0..padded_data.len() {
+            padded_data[i] = 0; // no cheating!
+        }
+        ciphertext[32 + whichbyte % data.len()] ^= 1;
+        quickcheck::TestResult::from_bool(secretbox_open(&mut padded_data, &ciphertext,
+                                                         &n, &k.0).is_err())
+    }
+    quickcheck::quickcheck(f as fn(Vec<u8>, Nonce, SecretKey, usize) -> quickcheck::TestResult);
+}
+
+#[test]
+fn box_unbox() {
+    fn f(data: Vec<u8>, n: Nonce, k1: KeyPair, k2: KeyPair) {
+        let mut padded_data = vec![0;32];
+        padded_data.extend(data.clone());
+        let mut ciphertext = vec![0;padded_data.len()];
+        box_up(&mut ciphertext, &padded_data, &n, &k1.public, &k2.secret).unwrap();
+        for i in 0..padded_data.len() {
+            padded_data[i] = 0; // no cheating!
+        }
+        box_open(&mut padded_data, &ciphertext, &n, &k2.public, &k1.secret).unwrap();
+        for i in 0..data.len() {
+            assert_eq!(data[i], padded_data[32+i]);
+        }
+    }
+    quickcheck::quickcheck(f as fn(Vec<u8>, Nonce, KeyPair, KeyPair));
+}
+
+#[cfg(test)]
+
+#[test]
+fn nonce_is_ashow() {
+    fn true_nonce(_n: Nonce) -> bool { true }
+    quickcheck::quickcheck(true_nonce as fn(Nonce) -> bool);
+}
+
+#[test]
+fn keypair_is_ashow() {
+    fn f(_n: KeyPair) -> bool { true }
+    quickcheck::quickcheck(f as fn(KeyPair) -> bool);
+}
+
+#[test]
+fn secretkey_is_ashow() {
+    fn f(_n: SecretKey) -> bool { true }
+    quickcheck::quickcheck(f as fn(SecretKey) -> bool);
+}
+
+#[cfg(test)]
+impl quickcheck::Arbitrary for Nonce {
+    fn arbitrary<G: quickcheck::Gen>(g: &mut G) -> Self {
+        let mut array = [u8::arbitrary(g); 32];
+        for i in 1..32 {
+            array[i] = u8::arbitrary(g);
+        }
+        Nonce(array)
+    }
+    fn shrink(&self) -> Box<Iterator<Item=Self>> {
+        if self.0 == [0;32] {
+            quickcheck::empty_shrinker()
+        } else {
+            quickcheck::single_shrinker(Nonce([0;32]))
+        }
+    }
+}
+
+#[cfg(test)]
+impl quickcheck::Arbitrary for PublicKey {
+    fn arbitrary<G: quickcheck::Gen>(g: &mut G) -> Self {
+        KeyPair::arbitrary(g).public
+    }
+}
+
+#[cfg(test)]
+impl quickcheck::Arbitrary for SecretKey {
+    fn arbitrary<G: quickcheck::Gen>(g: &mut G) -> Self {
+        let mut array = [u8::arbitrary(g); 32];
+        for i in 1..32 {
+            array[i] = u8::arbitrary(g);
+        }
+        SecretKey(array)
+    }
+    fn shrink(&self) -> Box<Iterator<Item=Self>> {
+        if self.0 == [0;32] {
+            quickcheck::empty_shrinker()
+        } else {
+            quickcheck::single_shrinker(SecretKey([0;32]))
+        }
+    }
+}
+
+#[cfg(test)]
+impl quickcheck::Arbitrary for KeyPair {
+    fn arbitrary<G: quickcheck::Gen>(g: &mut G) -> Self {
+        let mut pk: [u8; 32] = [0; 32];
+        let sk = SecretKey::arbitrary(g);
+        scalarmult_base(&mut pk, &sk.0);
+        KeyPair{ public: PublicKey(pk), secret: sk }
+    }
+    fn shrink(&self) -> Box<Iterator<Item=Self>> {
+        if self.secret.0 == [0;32] {
+            quickcheck::empty_shrinker()
+        } else {
+            Box::new(self.secret.0[0].shrink().map(|c| {
+                let sk = SecretKey([c;32]);
+                let mut pk: [u8; 32] = [0; 32];
+                scalarmult_base(&mut pk, &sk.0);
+                KeyPair{ public: PublicKey(pk), secret: sk }
+            }))
+        }
+    }
 }
