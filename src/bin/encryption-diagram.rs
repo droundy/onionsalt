@@ -10,6 +10,7 @@ use onionsalt::bytes::{SelfDocumenting};
 #[allow(dead_code)]
 fn main() {
     let mut diagram = bytes::Diagram::new();
+    let mut return_key = bytes::Diagram::new();
 
     let pairs = [crypto::box_keypair().unwrap(),
                  crypto::box_keypair().unwrap(),
@@ -28,7 +29,7 @@ fn main() {
     let mut payload: [u8; PAYLOAD_LENGTH] = [0; PAYLOAD_LENGTH];
     payload[3] = 3;
     let payload = payload;
-    onionbox_algorithm(&mut diagram, &keys_and_routes, &payload, 2).unwrap();
+    onionbox_algorithm(&mut diagram, &mut return_key, &keys_and_routes, &payload, 2).unwrap();
 
     let mut f = File::create("paper/encryption.eps").unwrap();
     f.write_all(diagram.postscript().as_bytes()).unwrap();

@@ -17,6 +17,7 @@ pub trait SelfDocumenting {
                              key: &[u8; 32])
                              -> Result<(), crypto::NaClError>;
     fn get_bytes(&mut self, from: usize, length: usize) -> Vec<u8>;
+    fn copy_bytes(&mut self, to: usize, src: &Self, from: usize, length: usize);
 
     fn annotate(&mut self, message: &str);
     fn clear(&mut self);
@@ -120,6 +121,11 @@ impl SelfDocumenting for [u8; BUFSIZE] {
             self[i] = 0;
         }
         out
+    }
+    fn copy_bytes(&mut self, to: usize, src: &Self, from: usize, length: usize) {
+        for i in 0..length {
+            self[to+i] = src[from+i];
+        }
     }
 }
 
@@ -496,6 +502,15 @@ impl SelfDocumenting for Diagram {
         panic!("I am disturbed by the bytes you seek. {} and {}\n{:?}",
                from, length, blocklocations);
     }
+    fn copy_bytes(&mut self, to: usize, src: &Self, from: usize, length: usize) {
+        let (_, copied, _) = split3(&src.blocks, from, length);
+        let (before, _, after) = split3(&self.blocks, to, length);
+        self.blocks = before;
+        self.blocks.extend(copied);
+        self.blocks.extend(after);
+        assert_eq!(self.len(), BUFSIZE);
+    }
+
 
     fn annotate(&mut self, message: &str) {
         self.asciiart = format!("{}\n{}\n\n", self.asciiart, message);
