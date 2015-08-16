@@ -27,6 +27,9 @@ if os.getenv('MINIMAL') == None and not os.system('echo -n "# " && cargo --versi
     print('| epstopdf paper/encryption.eps')
     print('< paper/encryption.eps')
     print()
+    print('| epstopdf paper/return-key.eps')
+    print('< paper/return-key.eps')
+    print()
 else:
     print('# Cargo does not work.  :(')
 

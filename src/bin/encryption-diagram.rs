@@ -35,6 +35,9 @@ fn main() {
     f.write_all(diagram.postscript().as_bytes()).unwrap();
     // println!("\n\n{}", diagram.asciiart());
 
+    f = File::create("paper/return-key.eps").unwrap();
+    f.write_all(return_key.postscript().as_bytes()).unwrap();
+
     for i in 0..6 {
         diagram.clear();
 

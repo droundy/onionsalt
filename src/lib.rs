@@ -510,6 +510,22 @@ pub fn onionbox_algorithm<T: bytes::SelfDocumenting>(buffer: &mut T,
                                                   &my_keypairs[i].secret));
     }
 
+    // First let's grab the ciphertext to decrypt the return message...
+    for i in payload_recipient+1..ROUTE_COUNT {
+        return_key.sillybox_afternm(AUTH_LENGTH, &nonce, &skeys[i],
+                                    &format!("{}", i));
+        return_key.annotate(&format!("Preparing to decrypt with respect to key {}",
+                                     i));
+    }
+    return_key.move_bytes(PACKET_LENGTH - PAYLOAD_LENGTH,
+                          bytes::BUFSIZE - PAYLOAD_LENGTH,
+                          PAYLOAD_LENGTH);
+    return_key.set_bytes(0,
+                         PACKET_LENGTH - PAYLOAD_LENGTH,
+                         &[0;PACKET_LENGTH-PAYLOAD_LENGTH],
+                         "0");
+
+
     buffer.annotate(&format!("Starting with buffer of zeros."));
 
     for i in 0..ROUTE_COUNT {
@@ -547,6 +563,7 @@ pub fn onionbox_algorithm<T: bytes::SelfDocumenting>(buffer: &mut T,
             buffer.annotate(&format!("Adding routing info for {}", i));
         } else {
             return_key.copy_bytes(0, buffer, 32+ROUTING_LENGTH, 32);
+            return_key.annotate("Adding the final public key to the return key");
             buffer.annotate(&format!("Adding routing info but no public key {}", i));
         }
         // Add the payload if it is the right time.
@@ -582,19 +599,16 @@ pub fn onionbox_open_algorithm<T: bytes::SelfDocumenting>(buffer: &mut T,
                                                                     crypto::NaClError>
 {
     let pk: &[u8] = &buffer.get_bytes(0, 32);
-    buffer.annotate(&format!("Extract ephemeral public key"));
     buffer.move_bytes(ROUTE_COUNT*ROUTING_OVERHEAD,
                       bytes::BUFSIZE-PAYLOAD_LENGTH,
                       PAYLOAD_LENGTH);
-    buffer.annotate(&format!("Move payload to the right"));
     buffer.move_bytes(32, 16, ROUTE_COUNT*ROUTING_OVERHEAD);
-    buffer.annotate(&format!("Move routing 16 bytes to the left"));
     // the following is only to beautify the picture, since the bytes
     // are already zero.
-    // buffer.set_bytes(bytes::BUFSIZE-PAYLOAD_LENGTH-ROUTING_OVERHEAD,
-    //                  ROUTING_OVERHEAD,
-    //                  &[0;ROUTING_OVERHEAD],
-    //                  "0");
+    buffer.set_bytes(bytes::BUFSIZE-PAYLOAD_LENGTH-ROUTING_OVERHEAD,
+                     ROUTING_OVERHEAD,
+                     &[0;ROUTING_OVERHEAD],
+                     "0");
     buffer.annotate(&format!("Extract the public key and insert zeros"));
 
     let skey = try!(crypto::sillybox_beforenm(pk, secret_key));
@@ -717,11 +731,11 @@ fn check_onionbox_on_buffer() {
 #[test]
 fn test_onionbox_auth() {
     use crypto::KeyPair;
-    fn f(data: Vec<u8>,
+    fn f(data: Vec<u8>, response_data: Vec<u8>,
          payload_recipient: usize,
          pairs : (KeyPair,KeyPair,KeyPair,KeyPair,KeyPair,KeyPair))
          -> quickcheck::TestResult {
-        if data.len() == 0 {
+        if data.len() == 0 || response_data.len() == 0 {
             return quickcheck::TestResult::discard();
         }
 
@@ -758,7 +772,7 @@ fn test_onionbox_auth() {
                 // We are the recipient!
                 let mut response: [u8; PAYLOAD_LENGTH] = [0; PAYLOAD_LENGTH];
                 for j in 0..PAYLOAD_LENGTH {
-                    response[j] = j as u8;
+                    response[j] = response_data[j % response_data.len()];
                     if buffer[PACKET_LENGTH - PAYLOAD_LENGTH + j] != payload[j] {
                         return quickcheck::TestResult::error(
                             format!("Response {:?} != {:?}",
@@ -776,9 +790,17 @@ fn test_onionbox_auth() {
                             &buffer[j], &return_key[j]));
             }
         }
+        for j in 0 .. PAYLOAD_LENGTH {
+            let decrypted = buffer[PACKET_LENGTH-PAYLOAD_LENGTH+j] ^ return_key[PACKET_LENGTH-PAYLOAD_LENGTH+j];
+            let resp = response_data[j % response_data.len()];
+            if decrypted != resp {
+                // return quickcheck::TestResult::error(
+                //     format!("Bad response {:?} != {:?}", decrypted, resp));
+            }
+        }
         quickcheck::TestResult::passed()
     }
-    quickcheck::quickcheck(f as fn(Vec<u8>, usize,
+    quickcheck::quickcheck(f as fn(Vec<u8>, Vec<u8>, usize,
                                    (KeyPair, KeyPair, KeyPair,
                                     KeyPair, KeyPair, KeyPair)) -> quickcheck::TestResult);
 }
