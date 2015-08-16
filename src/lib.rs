@@ -517,8 +517,8 @@ pub fn onionbox_algorithm<T: bytes::SelfDocumenting>(buffer: &mut T,
         return_key.annotate(&format!("Preparing to decrypt with respect to key {}",
                                      i));
     }
-    return_key.move_bytes(PACKET_LENGTH - PAYLOAD_LENGTH,
-                          bytes::BUFSIZE - PAYLOAD_LENGTH,
+    return_key.move_bytes(bytes::BUFSIZE - PAYLOAD_LENGTH,
+                          PACKET_LENGTH - PAYLOAD_LENGTH,
                           PAYLOAD_LENGTH);
     return_key.set_bytes(0,
                          PACKET_LENGTH - PAYLOAD_LENGTH,
@@ -563,7 +563,7 @@ pub fn onionbox_algorithm<T: bytes::SelfDocumenting>(buffer: &mut T,
             buffer.annotate(&format!("Adding routing info for {}", i));
         } else {
             return_key.copy_bytes(0, buffer, 32+ROUTING_LENGTH, 32);
-            return_key.annotate("Adding the final public key to the return key");
+            return_key.annotate("Shifting and adding the final public key to the return key");
             buffer.annotate(&format!("Adding routing info but no public key {}", i));
         }
         // Add the payload if it is the right time.
@@ -794,8 +794,8 @@ fn test_onionbox_auth() {
             let decrypted = buffer[PACKET_LENGTH-PAYLOAD_LENGTH+j] ^ return_key[PACKET_LENGTH-PAYLOAD_LENGTH+j];
             let resp = response_data[j % response_data.len()];
             if decrypted != resp {
-                // return quickcheck::TestResult::error(
-                //     format!("Bad response {:?} != {:?}", decrypted, resp));
+                return quickcheck::TestResult::error(
+                    format!("Bad response {:?} != {:?}", decrypted, resp));
             }
         }
         quickcheck::TestResult::passed()

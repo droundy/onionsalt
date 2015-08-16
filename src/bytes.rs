@@ -503,7 +503,10 @@ impl SelfDocumenting for Diagram {
                from, length, blocklocations);
     }
     fn copy_bytes(&mut self, to: usize, src: &Self, from: usize, length: usize) {
-        let (_, copied, _) = split3(&src.blocks, from, length);
+        let (_, mut copied, _) = split3(&src.blocks, from, length);
+        for i in 0..copied.len() {
+            copied[i].oldx = -1;
+        }
         let (before, _, after) = split3(&self.blocks, to, length);
         self.blocks = before;
         self.blocks.extend(copied);
