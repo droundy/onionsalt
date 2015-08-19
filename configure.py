@@ -11,6 +11,7 @@ if os.getenv('MINIMAL') == None and not os.system('echo -n "# " && cargo --versi
     print('c .log')
     print('c .tum')
     print('c .test')
+    print('c .rlib')
     print('C paper')
     print('C target/debug/deps')
     print('C target/debug/.fingerprint')
