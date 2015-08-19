@@ -75,11 +75,11 @@ pub const OVERHEADBYTES: usize = 48;
 /// extra information.
 pub const ROUTING_LENGTH: usize = 24;
 
-pub const ROUTING_OVERHEAD: usize = ROUTING_LENGTH + OVERHEADBYTES;
+const ROUTING_OVERHEAD: usize = ROUTING_LENGTH + OVERHEADBYTES;
 
 pub const ROUTE_COUNT: usize = 6;
 
-pub const AUTH_LENGTH: usize = (ROUTE_COUNT+1)*ROUTING_OVERHEAD - AUTHENTICATIONBYTES - 32;
+const AUTH_LENGTH: usize = (ROUTE_COUNT+1)*ROUTING_OVERHEAD - AUTHENTICATIONBYTES - 32;
 
 /// PACKET_LENGTH is the size that we actually send to each recipient.
 pub const PACKET_LENGTH: usize =
@@ -95,9 +95,13 @@ pub struct OnionBox {
     return_key: [u8; PACKET_LENGTH],
 }
 impl OnionBox {
+    /// The encrypted packet, to be sent to the first receiver.
     pub fn packet(&self) -> [u8; PACKET_LENGTH] {
         self.packet
     }
+    /// This function accepts a packet that has been sent to us, and
+    /// decrypts it without authentication if it is the response to
+    /// our original message.
     pub fn read_return(&self, msg: &[u8; PACKET_LENGTH]) -> Option<[u8; PAYLOAD_LENGTH]> {
         for i in 0..32 {
             if msg[i] != self.return_key[i] {
@@ -118,12 +122,17 @@ pub struct OpenedOnionBox {
     routing: [u8; ROUTING_LENGTH],
 }
 impl OpenedOnionBox {
+    /// The packet to be forwarded onwards to the next router.
     pub fn packet(&self) -> [u8; PACKET_LENGTH] {
         self.packet
     }
+    /// The routing information for us.
     pub fn routing(&self) -> [u8; ROUTING_LENGTH] {
         self.routing
     }
+    /// The decrypted payload, *if* it is intended for us.  There is
+    /// no authentication on this method, so you need some other
+    /// mechanism to ensure that this information is valid.
     pub fn payload(&self) -> [u8; PAYLOAD_LENGTH] {
         let mut out = [0; PAYLOAD_LENGTH];
         for i in 0..PAYLOAD_LENGTH {
@@ -131,6 +140,9 @@ impl OpenedOnionBox {
         }
         out
     }
+    /// Set `response` to the response payload information.  This is
+    /// only likely to work correctly if the sender intended to ask us
+    /// for a response.
     pub fn respond(&mut self, response: &[u8; PAYLOAD_LENGTH]) {
         let mut buffer = [8; bytes::BUFSIZE];
         for i in 0..PACKET_LENGTH {
@@ -186,8 +198,9 @@ pub fn onionbox_open(input: &[u8; PACKET_LENGTH],
 }
 
 
-/// Encrypt a message in an onion defined by `keys_and_routings`, with
-/// `payload` directed to `payload_recipient`.
+/// **Not for public consumption!** Encrypt a message in an onion
+/// defined by `keys_and_routings`, with `payload` directed to
+/// `payload_recipient`.
 pub fn onionbox_algorithm<T: bytes::SelfDocumenting>(buffer: &mut T,
                                                      return_key: &mut T,
                                                      keys_and_routings: &[(crypto::PublicKey,
@@ -301,8 +314,8 @@ pub fn onionbox_algorithm<T: bytes::SelfDocumenting>(buffer: &mut T,
     Ok(())
 }
 
-/// The buffer already contains the message, and contains the next message
-/// on exit.
+/// **Not for public consumption!** The buffer already contains the
+/// message, and contains the next message on exit.
 pub fn onionbox_open_algorithm<T: bytes::SelfDocumenting>(buffer: &mut T,
                                                           secret_key: &crypto::SecretKey)
                                                           -> Result<[u8; ROUTING_LENGTH],
@@ -335,7 +348,7 @@ pub fn onionbox_open_algorithm<T: bytes::SelfDocumenting>(buffer: &mut T,
     Ok(route)
 }
 
-
+/// **Not for public consumption!**
 pub fn onionbox_insert_payload_algorithm<T: bytes::SelfDocumenting>(buffer: &mut T,
                                                                     payload: &[u8; PAYLOAD_LENGTH]) {
     buffer.set_bytes(bytes::BUFSIZE - PAYLOAD_LENGTH - 32 - ROUTING_LENGTH,
