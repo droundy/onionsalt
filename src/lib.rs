@@ -77,17 +77,30 @@ pub const ROUTING_LENGTH: usize = 24;
 
 const ROUTING_OVERHEAD: usize = ROUTING_LENGTH + OVERHEADBYTES;
 
+/// The number of routers we send through.  Eventually I want to
+/// implement the feature to send through fewer routers with the
+/// message arriving back early.
 pub const ROUTE_COUNT: usize = 6;
 
 const AUTH_LENGTH: usize = (ROUTE_COUNT+1)*ROUTING_OVERHEAD - AUTHENTICATIONBYTES - 32;
 
 /// PACKET_LENGTH is the size that we actually send to each recipient.
+///
+/// ```
+/// # use onionsalt::*;
+/// assert_eq!(PACKET_LENGTH, 1024);
+/// ```
 pub const PACKET_LENGTH: usize =
     bytes::BUFSIZE - 16 + 32 - ROUTING_OVERHEAD;
 
 /// PAYLOAD_LENGTH is the size of the payload that the primary
 /// recipient can get.  It differs from PACKET_LENGTH by the total
 /// routing overhead.
+///
+/// ```
+/// # use onionsalt::*;
+/// assert_eq!(PAYLOAD_LENGTH, 592);
+/// ```
 pub const PAYLOAD_LENGTH: usize = PACKET_LENGTH - ROUTE_COUNT*ROUTING_OVERHEAD;
 
 pub struct OnionBox {
