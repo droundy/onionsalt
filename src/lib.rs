@@ -170,9 +170,41 @@ impl OpenedOnionBox {
 
 /// Encrypt a message in an onion defined by `keys_and_routings`, with
 /// `payload` directed to `payload_recipient`.
+///
+/// `keys_and_routings` is the sequence of public keys owned by
+/// recipients, and the routing information that said recipient should
+/// use, presumably to send the message to the next recipient.  There
+/// can be up to `ROUTE_COUNT` elements in this slice.  The final
+/// address should be our own, if a return message is desired.  The
+/// routing information should indicate to the payload recipient
+/// (whose index in the slice is `payload_recipient`) what to do with
+/// the payload.
+///
+/// # Security properties
+///
+/// No recipient (not possessing the secret keys of any other
+/// recipient) by examining the packet received should be able to
+/// determine any information other than the plaintext contents of the
+/// routing information (except for the payload recipient, who should
+/// also be able to read the plaintext payload.  Similarly, each
+/// recipient can be confident that the routing information has not
+/// been tampered with, although it could have been replaced in its
+/// entirety with other routing information.
+///
+/// Things to keep in mind:
+///
+/// 1. There is no protection against tampering with the payload.  The
+///    payload recipient must independently verify the integrity of
+///    the payload.
+///
+/// 2. The route is in no way authenticated, so although the
+///    recipients may be certain the route has not been tampered with,
+///    they may not determine the source of the message.
+///
+/// 3. No recipient can in any way determine (from the message
+///    received) her place in the series of routing.
 pub fn onionbox(keys_and_routings: &[(crypto::PublicKey,
-                                      [u8; ROUTING_LENGTH]);
-                                     ROUTE_COUNT],
+                                      [u8; ROUTING_LENGTH])],
                 payload: &[u8; PAYLOAD_LENGTH],
                 payload_recipient: usize) -> Result<OnionBox, crypto::NaClError> {
     let mut out = OnionBox {
@@ -217,12 +249,12 @@ pub fn onionbox_open(input: &[u8; PACKET_LENGTH],
 pub fn onionbox_algorithm<T: bytes::SelfDocumenting>(buffer: &mut T,
                                                      return_key: &mut T,
                                                      keys_and_routings: &[(crypto::PublicKey,
-                                                                           [u8; ROUTING_LENGTH]);
-                                                                          ROUTE_COUNT],
+                                                                           [u8; ROUTING_LENGTH])],
                                                      payload: &[u8; PAYLOAD_LENGTH],
                                                      payload_recipient: usize)
                                                      -> Result<(), crypto::NaClError> {
-    if payload_recipient >= ROUTE_COUNT {
+    let route_count = keys_and_routings.len();
+    if payload_recipient >= route_count || route_count > ROUTE_COUNT {
         return Err(crypto::NaClError::InvalidInput);
     }
 
@@ -237,17 +269,17 @@ pub fn onionbox_algorithm<T: bytes::SelfDocumenting>(buffer: &mut T,
     // our plaintext.
     let mut my_keypairs: [crypto::KeyPair; ROUTE_COUNT] =
         [crypto::EMPTY_PAIR; ROUTE_COUNT];
-    for i in 0..ROUTE_COUNT {
+    for i in 0..route_count {
         my_keypairs[i] = try!(crypto::box_keypair());
     }
-    let mut skeys: [[u8; 32]; ROUTE_COUNT] = [[8;32]; ROUTE_COUNT];
-    for i in 0..ROUTE_COUNT {
+    let mut skeys: [[u8; 32]; ROUTE_COUNT] = [[0;32]; ROUTE_COUNT];
+    for i in 0..route_count {
         skeys[i] = try!(crypto::sillybox_beforenm(&keys_and_routings[i].0,
                                                   &my_keypairs[i].secret));
     }
 
     // First let's grab the ciphertext to decrypt the return message...
-    for i in payload_recipient+1..ROUTE_COUNT {
+    for i in payload_recipient+1..route_count {
         return_key.sillybox_afternm(AUTH_LENGTH, &nonce, &skeys[i],
                                     &format!("{}", i));
         return_key.annotate(&format!("Preparing to decrypt with respect to key {}",
@@ -261,15 +293,28 @@ pub fn onionbox_algorithm<T: bytes::SelfDocumenting>(buffer: &mut T,
                          &[0;PACKET_LENGTH-PAYLOAD_LENGTH],
                          "0");
 
+    buffer.set_bytes(0, bytes::BUFSIZE, &[0; bytes::BUFSIZE], "0");
+    if route_count == ROUTE_COUNT {
+        buffer.annotate(&format!("Starting with buffer of zeros."));
+    } else {
+        // For a short onion, we need to start with random data
+        let nonce = try!(crypto::random_nonce());
+        let skey = try!(crypto::random_nonce()).0;
+        buffer.sillybox_afternm(AUTH_LENGTH, &nonce, &skey, &format!("Random"));
+        buffer.set_bytes(0,32, &[0;32], "0");
+        buffer.set_bytes(bytes::BUFSIZE - PAYLOAD_LENGTH - ROUTING_OVERHEAD,
+                         PAYLOAD_LENGTH + ROUTING_OVERHEAD,
+                         &[0; PAYLOAD_LENGTH + ROUTING_OVERHEAD], "0");
+        buffer.annotate(&format!("Starting with a random+zeros buffer for {}-layer onion.",
+                                 route_count));
+    }
 
-    buffer.annotate(&format!("Starting with buffer of zeros."));
-
-    for i in 0..ROUTE_COUNT {
+    for i in 0..route_count {
         buffer.sillybox_afternm(AUTH_LENGTH, &nonce, &skeys[i],
                                 &format!("{}", i));
         buffer.annotate(&format!("Encrypting to key {}", i));
         buffer.set_bytes(0, 32, &[0;32], "0");
-        if i != ROUTE_COUNT-1 {
+        if i != route_count-1 {
             buffer.move_bytes(bytes::BUFSIZE + 32 - PAYLOAD_LENGTH - ROUTE_COUNT*ROUTING_OVERHEAD,
                               bytes::BUFSIZE + 32 - PAYLOAD_LENGTH - (ROUTE_COUNT+1)*ROUTING_OVERHEAD,
                               ROUTE_COUNT*ROUTING_OVERHEAD - 32);
@@ -280,10 +325,10 @@ pub fn onionbox_algorithm<T: bytes::SelfDocumenting>(buffer: &mut T,
     // At this stage, plaintext should be set up for the innermost
     // layer of the onion, although offset by a ROUTING_OVERHEAD.
 
-    for i in (0..ROUTE_COUNT).rev() {
+    for i in (0..route_count).rev() {
         // Move into place the portion of the routing information
         // which has already been encrypted.
-        if i != ROUTE_COUNT-1 {
+        if i != route_count-1 {
             buffer.move_bytes(bytes::BUFSIZE + 32 - PAYLOAD_LENGTH - (ROUTE_COUNT+1)*ROUTING_OVERHEAD,
                               bytes::BUFSIZE + 32 - PAYLOAD_LENGTH - ROUTE_COUNT*ROUTING_OVERHEAD,
                               ROUTE_COUNT*ROUTING_OVERHEAD - 32);
@@ -293,7 +338,7 @@ pub fn onionbox_algorithm<T: bytes::SelfDocumenting>(buffer: &mut T,
         buffer.set_bytes(32, ROUTING_LENGTH, &keys_and_routings[i].1,
                          &format!("R{}", i) );
         // Add the public key we are using for the encryption.
-        if i < ROUTE_COUNT-1 {
+        if i < route_count-1 {
             buffer.set_bytes(32+ROUTING_LENGTH, 32, &my_keypairs[i+1].public.0,
                              &format!("P{}", i+1));
             buffer.annotate(&format!("Adding routing info for {}", i));
@@ -455,6 +500,36 @@ fn check_onionbox_on_buffer() {
 }
 
 #[test]
+fn check_short_onionbox_on_buffer() {
+    use bytes::{SelfDocumenting};
+
+    let mut buffer = [0; bytes::BUFSIZE];
+    let mut return_key = [0; bytes::BUFSIZE];
+
+    let pairs = [crypto::box_keypair().unwrap(),
+                 crypto::box_keypair().unwrap(),
+                 crypto::box_keypair().unwrap()];
+
+    let keys_and_routes = [(pairs[0].public, *b"123456789012345612345678"),
+                           (pairs[1].public, *b"my friend is hermy frien"),
+                           (pairs[2].public, *b"address 3 for yoaddress ")];
+    let mut payload: [u8; PAYLOAD_LENGTH] = [0; PAYLOAD_LENGTH];
+    payload[3] = 3;
+    let payload = payload;
+    onionbox_algorithm(&mut buffer, &mut return_key, &keys_and_routes, &payload, 1).unwrap();
+
+    for i in 0..pairs.len() {
+        buffer.clear();
+
+        buffer.annotate(&format!("Message as received by {}", i));
+        let route = onionbox_open_algorithm(&mut buffer, &pairs[i].secret).unwrap();
+        println!("route should be {}", String::from_utf8_lossy(&keys_and_routes[i].1));
+        println!("route is actually {}", String::from_utf8_lossy(&route));
+        assert_eq!(route, keys_and_routes[i].1);
+    }
+}
+
+#[test]
 fn test_onionbox_auth() {
     use crypto::KeyPair;
     fn f(data: Vec<u8>, response_data: Vec<u8>,
@@ -529,4 +604,77 @@ fn test_onionbox_auth() {
     quickcheck::quickcheck(f as fn(Vec<u8>, Vec<u8>, usize,
                                    (KeyPair, KeyPair, KeyPair,
                                     KeyPair, KeyPair, KeyPair)) -> quickcheck::TestResult);
+}
+
+
+#[test]
+fn test_short_onionbox_auth() {
+    use crypto::KeyPair;
+    fn f(data: Vec<u8>, response_data: Vec<u8>,
+         payload_recipient: usize,
+         pairs : (KeyPair,KeyPair,KeyPair))
+         -> quickcheck::TestResult {
+        if data.len() == 0 || response_data.len() == 0 {
+            return quickcheck::TestResult::discard();
+        }
+
+        let mut buffer = [0; bytes::BUFSIZE];
+        let mut return_key = [0; bytes::BUFSIZE];
+
+        let pairs = [pairs.0, pairs.1, pairs.2];
+        let payload_recipient = payload_recipient % pairs.len();
+        let keys_and_routes
+            = [(pairs[0].public, *b"123456789012345612345678"),
+               (pairs[1].public, *b"my friend is hermy frien"),
+               (pairs[2].public, *b"address 3 for yoaddress ")];
+        let mut payload: [u8; PAYLOAD_LENGTH] = [0; PAYLOAD_LENGTH];
+        for i in 0..PAYLOAD_LENGTH {
+            payload[i] = data[i % data.len()];
+        }
+        payload[3] = 3;
+        let payload = payload;
+        onionbox_algorithm(&mut buffer, &mut return_key,
+                           &keys_and_routes, &payload, payload_recipient).unwrap();
+
+        for i in 0..pairs.len() {
+            let route = onionbox_open_algorithm(&mut buffer, &pairs[i].secret).unwrap();
+            if route != keys_and_routes[i].1 {
+                return quickcheck::TestResult::error(
+                    format!("route[{}] {:?} != {:?}", i, route, keys_and_routes[i].1));
+            }
+
+            if i == payload_recipient {
+                // We are the recipient!
+                let mut response: [u8; PAYLOAD_LENGTH] = [0; PAYLOAD_LENGTH];
+                for j in 0..PAYLOAD_LENGTH {
+                    response[j] = response_data[j % response_data.len()];
+                    if buffer[PACKET_LENGTH - PAYLOAD_LENGTH + j] != payload[j] {
+                        return quickcheck::TestResult::error(
+                            format!("Response {:?} != {:?}",
+                                    &buffer[PACKET_LENGTH - PAYLOAD_LENGTH + j],
+                                    &payload[j]));
+                    }
+                }
+                onionbox_insert_payload_algorithm(&mut buffer, &response);
+            }
+        }
+        for j in 0..32 {
+            if buffer[j] != return_key[j] {
+                return quickcheck::TestResult::error(
+                    format!("Bad return key {:?} != {:?}",
+                            &buffer[j], &return_key[j]));
+            }
+        }
+        for j in 0 .. PAYLOAD_LENGTH {
+            let decrypted = buffer[PACKET_LENGTH-PAYLOAD_LENGTH+j] ^ return_key[PACKET_LENGTH-PAYLOAD_LENGTH+j];
+            let resp = response_data[j % response_data.len()];
+            if decrypted != resp {
+                return quickcheck::TestResult::error(
+                    format!("Bad response {:?} != {:?}", decrypted, resp));
+            }
+        }
+        quickcheck::TestResult::passed()
+    }
+    quickcheck::quickcheck(f as fn(Vec<u8>, Vec<u8>, usize,
+                                   (KeyPair, KeyPair, KeyPair)) -> quickcheck::TestResult);
 }
