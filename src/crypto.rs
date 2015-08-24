@@ -132,7 +132,8 @@ fn verify_16(x: &[u8; 16], y: &[u8; 16]) -> Result<(), NaClError> {
     }
 }
 
-fn core(inp: &[u8], k: &[u8; 32], c: &[u8], h: bool) -> [u8; 64] {
+fn core(inp: &[u8; 16], k: &[u8; 32], c: &[u8; 16])
+        -> ([Wrapping<u32>; 16], [Wrapping<u32>; 16]) {
     let mut x: [Wrapping<u32>; 16] = [Wrapping(0); 16];
     for i in 0..4 {
         x[5*i] = ld32(array_ref![c, 4*i, u8, 4]);
@@ -165,47 +166,42 @@ fn core(inp: &[u8], k: &[u8; 32], c: &[u8], h: bool) -> [u8; 64] {
             x[m] = w[m];
         }
     }
+    (x,y)
+}
+
+fn core_salsa20(inp: &[u8; 16], k: &[u8; 32], c: &[u8; 16]) -> [u8; 64] {
+    let (x,y) = core(inp,k,c);
 
     let mut out: [u8; 64] = [0; 64];
-    if h {
-        for i in 0..16 {
-            x[i] = x[i] + y[i];
-        }
-        for i in 0..4 {
-            x[5*i] = x[5*i] - ld32(array_ref![c, 4*i, u8, 4]);
-            x[6+i] = x[6+i] - ld32(array_ref!(inp, 4*i, u8, 4));
-        }
-        for i in 0..4 {
-            st32(array_mut_ref!(out, 4*i, u8, 4),x[5*i]);
-            st32(array_mut_ref!(out, 16+4*i, u8, 4),x[6+i]);
-        }
-    } else {
-        for i in 0..16 {
-            st32(array_mut_ref!(out, 4*i, u8, 4),x[i] + y[i]);
-        }
+    for i in 0..16 {
+        st32(array_mut_ref!(out, 4*i, u8, 4),x[i] + y[i]);
     }
     out
 }
 
-fn core_salsa20(inp: &[u8], k: &[u8; 32], c: &[u8]) -> [u8; 64] {
-    core(inp,k,c,false)
-}
+fn core_hsalsa20(n: &[u8; 16], k: &[u8; 32], c: &[u8; 16]) -> [u8; 32] {
+    let (mut x,y) = core(n,k,c);
 
-fn core_hsalsa20(n: &[u8], k: &[u8; 32], c: &[u8]) -> [u8; 32] {
-    let x = core(n,k,c,true);
-    let mut o: [u8; 32] = [0; 32];
-    for i in 0..32 {
-        o[i] = x[i];
+    let mut out: [u8; 32] = [0; 32];
+    for i in 0..16 {
+        x[i] = x[i] + y[i];
     }
-    o
+    for i in 0..4 {
+        x[5*i] = x[5*i] - ld32(array_ref![c, 4*i, u8, 4]);
+        x[6+i] = x[6+i] - ld32(array_ref!(n, 4*i, u8, 4));
+    }
+    for i in 0..4 {
+        st32(array_mut_ref!(out, 4*i, u8, 4),x[5*i]);
+        st32(array_mut_ref!(out, 16+4*i, u8, 4),x[6+i]);
+    }
+    out
 }
 
 static SIGMA: &'static [u8; 16] = b"expand 32-byte k";
 
-fn stream_salsa20_xor(c: &mut[u8], m_input: &[u8], mut b: u64,
-                             n: &[u8], k: &[u8; 32])
-                             -> Result<(), NaClError> {
-    let mut m_offset: usize = 0;
+fn stream_salsa20_xor(c: &mut[u8], mut m: &[u8], mut b: u64,
+                      n: &[u8; 16], k: &[u8; 32])
+                      -> Result<(), NaClError> {
     if b == 0 {
         return Err(NaClError::InvalidInput);
     }
@@ -217,18 +213,7 @@ fn stream_salsa20_xor(c: &mut[u8], m_input: &[u8], mut b: u64,
     while b >= 64 {
         let x = core_salsa20(&z,k,SIGMA);
         for i in 0..64 {
-            // The following is really ugly.  I wish I could
-            // define this closure just once and have it used
-            // throughout.  Also note the ugly duplication of code
-            // below.  :(
-            let m = |i: usize| {
-                if m_offset + i < m_input.len() {
-                    m_input[m_offset+i]
-                } else {
-                    0
-                }
-            };
-            c[c_offset + i] = m(i) ^ x[i];
+            c[c_offset + i] = if i < m.len() { m[i] ^ x[i] } else { x[i] };
         }
         let mut u: u64 = 1;
         for i in 8..16 {
@@ -238,28 +223,20 @@ fn stream_salsa20_xor(c: &mut[u8], m_input: &[u8], mut b: u64,
         }
         b -= 64;
         c_offset += 64;
-        m_offset += 64;
+        m = &m[64..];
     }
-
-    let m = |i: usize| {
-        if m_offset + i < m_input.len() {
-            m_input[m_offset+i]
-        } else {
-            0
-        }
-    };
 
     if b != 0 {
         let x = core_salsa20(&z,k,SIGMA);
         for i in 0..b as usize {
-            c[c_offset + i] = m(i) ^ x[i];
+            c[c_offset + i] = if i < m.len() { m[i] ^ x[i] } else { x[i] };
         }
     }
     Ok(())
 }
 
 
-fn stream_salsa20(c: &mut[u8], d: u64, n: &[u8], k: &[u8; 32])
+fn stream_salsa20(c: &mut[u8], d: u64, n: &[u8; 16], k: &[u8; 32])
                          -> Result<(), NaClError> {
     stream_salsa20_xor(c,&[],d,n,k)
 }
@@ -270,16 +247,16 @@ fn stream_salsa20(c: &mut[u8], d: u64, n: &[u8], k: &[u8; 32])
 // in tweetnacl.
 fn stream_32(n: &Nonce, k: &[u8; 32])
              -> Result<[u8; 32], NaClError> {
-    let s = core_hsalsa20(&n.0,k,SIGMA);
+    let s = core_hsalsa20(array_ref![n.0, 0, u8, 16], k, SIGMA);
     let mut c: [u8; 32] = [0; 32];
-    try!(stream_salsa20(&mut c,32,&n.0[16..],&s));
+    try!(stream_salsa20(&mut c,32,array_ref![n.0, 16, u8, 16],&s));
     Ok(c)
 }
 
 fn stream_xor(c: &mut[u8], m: &[u8], d: u64, n: &Nonce, k: &[u8; 32])
                          -> Result<(), NaClError> {
-    let s = core_hsalsa20(&n.0,k,SIGMA);
-    stream_salsa20_xor(c,m,d,&n.0[16..],&s)
+    let s = core_hsalsa20(array_ref![n.0, 0, u8, 16], k, SIGMA);
+    stream_salsa20_xor(c,m,d,array_ref![n.0, 16, u8, 16],&s)
 }
 
 fn add1305(h: &mut[u32], c: &[u32]) {
@@ -902,7 +879,7 @@ pub fn box_beforenm<PK: ToPublicKey + ?Sized,
     let y = try!(pk.to_public_key());
     let mut s: [u8; 32] = [0; 32];
     scalarmult(&mut s,&x.0,&y.0);
-    Ok(core_hsalsa20(&_0,&s,SIGMA))
+    Ok(core_hsalsa20(array_ref![_0, 0, u8, 16],&s,SIGMA))
 }
 
 /// Encrypt a message after creating a secret key using
@@ -979,7 +956,7 @@ pub fn sillybox_beforenm<PK: ToPublicKey + ?Sized,
     let y = try!(pk.to_public_key());
     let mut s: [u8; 32] = [0; 32];
     scalarmult(&mut s,&x.0,&y.0);
-    Ok(core_hsalsa20(&_0,&s,SIGMA))
+    Ok(core_hsalsa20(array_ref![_0,0,u8,16],&s,SIGMA))
 }
 
 /// Encrypt a message after creating a secret key using
