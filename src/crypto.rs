@@ -106,23 +106,23 @@ fn l32(x: Wrapping<u32>, c: usize) -> Wrapping<u32> {
     (x << c) | ((x&Wrapping(0xffffffff)) >> (32 - c))
 }
 
-fn ld32(x: &[u8]) -> Wrapping<u32> {
+fn ld32(x: &[u8; 4]) -> Wrapping<u32> {
     let mut u= Wrapping(x[3] as u32);
     u = (u<<8)|Wrapping(x[2] as u32);
     u = (u<<8)|Wrapping(x[1] as u32);
     (u<<8)|Wrapping(x[0] as u32)
 }
 
-fn st32(x: &mut[u8], mut u: Wrapping<u32>) {
+fn st32(x: &mut[u8; 4], mut u: Wrapping<u32>) {
     for i in 0..4 {
         x[i] = unwrap(u) as u8;
         u = u >> 8;
     }
 }
 
-fn vn(x: &[u8], y: &[u8], n: usize) -> Result<(), NaClError> {
+fn verify_16(x: &[u8; 16], y: &[u8; 16]) -> Result<(), NaClError> {
     let mut d: Wrapping<u32> = Wrapping(0);
-    for i in 0..n {
+    for i in 0..16 {
         d = d | Wrapping((x[i]^y[i]) as u32);
     }
     if unwrap(Wrapping(1) & ((d - Wrapping(1)) >> 8)) as i32 - 1 != 0 {
@@ -132,21 +132,13 @@ fn vn(x: &[u8], y: &[u8], n: usize) -> Result<(), NaClError> {
     }
 }
 
-fn verify_16(x: &[u8], y: &[u8]) -> Result<(), NaClError> {
-    vn(x,y,16)
-}
-
-// fn verify_32(x: &[u8], y: &[u8]) -> Result<(), NaClError> {
-//     vn(x,y,32)
-// }
-
-fn core(inp: &[u8], k: &[u8], c: &[u8], h: bool) -> [u8; 64] {
+fn core(inp: &[u8], k: &[u8; 32], c: &[u8], h: bool) -> [u8; 64] {
     let mut x: [Wrapping<u32>; 16] = [Wrapping(0); 16];
     for i in 0..4 {
-        x[5*i] = ld32(&c[4*i..]);
-        x[1+i] = ld32(&k[4*i..]);
-        x[6+i] = ld32(&inp[4*i..]);
-        x[11+i] = ld32(&k[16+4*i..]);
+        x[5*i] = ld32(array_ref![c, 4*i, u8, 4]);
+        x[1+i] = ld32(array_ref![k, 4*i, u8, 4]);
+        x[6+i] = ld32(array_ref![inp, 4*i, u8, 4]);
+        x[11+i] = ld32(array_ref![k, 16+4*i, u8, 4]);
     }
 
     let mut y: [Wrapping<u32>; 16] = [Wrapping(0); 16];
@@ -180,26 +172,26 @@ fn core(inp: &[u8], k: &[u8], c: &[u8], h: bool) -> [u8; 64] {
             x[i] = x[i] + y[i];
         }
         for i in 0..4 {
-            x[5*i] = x[5*i] - ld32(&c[4*i..]);
-            x[6+i] = x[6+i] - ld32(&inp[4*i..]);
+            x[5*i] = x[5*i] - ld32(array_ref![c, 4*i, u8, 4]);
+            x[6+i] = x[6+i] - ld32(array_ref!(inp, 4*i, u8, 4));
         }
         for i in 0..4 {
-            st32(&mut out[4*i..],x[5*i]);
-            st32(&mut out[16+4*i..],x[6+i]);
+            st32(array_mut_ref!(out, 4*i, u8, 4),x[5*i]);
+            st32(array_mut_ref!(out, 16+4*i, u8, 4),x[6+i]);
         }
     } else {
         for i in 0..16 {
-            st32(&mut out[4 * i..],x[i] + y[i]);
+            st32(array_mut_ref!(out, 4*i, u8, 4),x[i] + y[i]);
         }
     }
     out
 }
 
-fn core_salsa20(inp: &[u8], k: &[u8], c: &[u8]) -> [u8; 64] {
+fn core_salsa20(inp: &[u8], k: &[u8; 32], c: &[u8]) -> [u8; 64] {
     core(inp,k,c,false)
 }
 
-fn core_hsalsa20(n: &[u8], k: &[u8], c: &[u8]) -> [u8; 32] {
+fn core_hsalsa20(n: &[u8], k: &[u8; 32], c: &[u8]) -> [u8; 32] {
     let x = core(n,k,c,true);
     let mut o: [u8; 32] = [0; 32];
     for i in 0..32 {
@@ -211,7 +203,7 @@ fn core_hsalsa20(n: &[u8], k: &[u8], c: &[u8]) -> [u8; 32] {
 static SIGMA: &'static [u8; 16] = b"expand 32-byte k";
 
 fn stream_salsa20_xor(c: &mut[u8], m_input: &[u8], mut b: u64,
-                             n: &[u8], k: &[u8])
+                             n: &[u8], k: &[u8; 32])
                              -> Result<(), NaClError> {
     let mut m_offset: usize = 0;
     if b == 0 {
@@ -267,7 +259,7 @@ fn stream_salsa20_xor(c: &mut[u8], m_input: &[u8], mut b: u64,
 }
 
 
-fn stream_salsa20(c: &mut[u8], d: u64, n: &[u8], k: &[u8])
+fn stream_salsa20(c: &mut[u8], d: u64, n: &[u8], k: &[u8; 32])
                          -> Result<(), NaClError> {
     stream_salsa20_xor(c,&[],d,n,k)
 }
@@ -276,15 +268,15 @@ fn stream_salsa20(c: &mut[u8], d: u64, n: &[u8], k: &[u8])
 // always has a fixed length of 32, and returns its output.  We
 // don't need an actual crypto_stream, since it is only used once
 // in tweetnacl.
-fn stream_32(n: &Nonce, k: &[u8])
-                        -> Result<[u8; 32], NaClError> {
+fn stream_32(n: &Nonce, k: &[u8; 32])
+             -> Result<[u8; 32], NaClError> {
     let s = core_hsalsa20(&n.0,k,SIGMA);
     let mut c: [u8; 32] = [0; 32];
     try!(stream_salsa20(&mut c,32,&n.0[16..],&s));
     Ok(c)
 }
 
-fn stream_xor(c: &mut[u8], m: &[u8], d: u64, n: &Nonce, k: &[u8])
+fn stream_xor(c: &mut[u8], m: &[u8], d: u64, n: &Nonce, k: &[u8; 32])
                          -> Result<(), NaClError> {
     let s = core_hsalsa20(&n.0,k,SIGMA);
     stream_salsa20_xor(c,m,d,&n.0[16..],&s)
@@ -546,14 +538,14 @@ fn onetimeauth(mut m: &[u8], k: &[u8])
     Ok(out)
 }
 
-fn onetimeauth_verify(h: &[u8], m: &[u8], k: &[u8])
+fn onetimeauth_verify(h: &[u8; 16], m: &[u8], k: &[u8])
                       -> Result<(), NaClError> {
     let x = try!(onetimeauth(m, k));
     verify_16(h,&x)
 }
 
 /// Use symmetric encryption to encrypt a message.
-pub fn secretbox(c: &mut[u8], m: &[u8], n: &Nonce, k: &[u8])
+pub fn secretbox(c: &mut[u8], m: &[u8], n: &Nonce, k: &[u8; 32])
                         -> Result<(), NaClError> {
     let d = c.len() as u64;
     if d != m.len() as u64 {
@@ -578,7 +570,7 @@ pub fn secretbox(c: &mut[u8], m: &[u8], n: &Nonce, k: &[u8])
 }
 
 /// Decrypt a message encrypted with `secretbox`.
-pub fn secretbox_open(m: &mut[u8], c: &[u8], n: &Nonce, k: &[u8])
+pub fn secretbox_open(m: &mut[u8], c: &[u8], n: &Nonce, k: &[u8; 32])
                              -> Result<(), NaClError> {
     let d = c.len() as u64;
     if m.len() as u64 != d {
@@ -588,7 +580,7 @@ pub fn secretbox_open(m: &mut[u8], c: &[u8], n: &Nonce, k: &[u8])
         return Err(NaClError::InvalidInput);
     }
     let x = try!(stream_32(n,k));
-    try!(onetimeauth_verify(&c[16..],&c[32..],&x));
+    try!(onetimeauth_verify(array_ref!(c, 16, u8, 16), &c[32..], &x));
     try!(stream_xor(m,c,d,n,k));
     for i in 0..32 {
         m[i] = 0;
@@ -622,7 +614,7 @@ fn secretbox_works() {
 
 /// Use symmetric encryption to encrypt a message, with only the first
 /// `nauth` bytes plaintext authenticated.
-fn funnybox(c: &mut[u8], m: &[u8], nauth: usize, n: &Nonce, k: &[u8])
+fn funnybox(c: &mut[u8], m: &[u8], nauth: usize, n: &Nonce, k: &[u8; 32])
                 -> Result<(), NaClError> {
     let d = c.len() as u64;
     if d != m.len() as u64 || nauth > d as usize -32 || d < 32 {
@@ -645,14 +637,14 @@ fn funnybox(c: &mut[u8], m: &[u8], nauth: usize, n: &Nonce, k: &[u8])
 
 /// Decrypt a message encrypted with `funnybox`, only authenticating
 /// the first `nauth` bytes.
-pub fn funnybox_open(m: &mut[u8], c: &[u8], nauth: usize, n: &Nonce, k: &[u8])
+pub fn funnybox_open(m: &mut[u8], c: &[u8], nauth: usize, n: &Nonce, k: &[u8; 32])
                              -> Result<(), NaClError> {
     let d = c.len() as u64;
     if m.len() as u64 != d || nauth > d as usize - 32 || d < 32 {
         return Err(NaClError::InvalidInput);
     }
     let x = try!(stream_32(n,k));
-    try!(onetimeauth_verify(&c[16..],&c[32..32+nauth],&x));
+    try!(onetimeauth_verify(array_ref!(c, 16, u8, 16), &c[32..32+nauth], &x));
     try!(stream_xor(m,c,d,n,k));
     for i in 0..32 {
         m[i] = 0;

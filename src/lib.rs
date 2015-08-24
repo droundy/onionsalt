@@ -60,6 +60,9 @@
 #[cfg(test)]
 extern crate quickcheck;
 
+#[macro_use]
+extern crate arrayref;
+
 extern crate rand;
 
 pub mod crypto;
