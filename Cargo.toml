@@ -6,7 +6,7 @@ authors = ["David Roundy <roundyd@physics.oregonstate.edu>"]
 [dependencies]
 rand = "0.3" # Or a specific version
 
-arrayref = { version = "0.1.0", git = "https://github.com/droundy/arrayref" }
+arrayref = "0.1.0"
 
 [dev-dependencies]
 quickcheck = "*"
