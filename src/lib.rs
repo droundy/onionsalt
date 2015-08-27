@@ -400,8 +400,7 @@ pub fn onionbox_algorithm<T: bytes::SelfDocumenting>(buffer: &mut T,
             buffer.move_bytes(bytes::BUFSIZE + 32 - ENCRYPTEDPAYLOAD_LENGTH - ROUTE_COUNT*ROUTING_OVERHEAD,
                               bytes::BUFSIZE + 32 - ENCRYPTEDPAYLOAD_LENGTH - (ROUTE_COUNT+1)*ROUTING_OVERHEAD,
                               ROUTE_COUNT*ROUTING_OVERHEAD - 32);
-            buffer.annotate(&format!("Shifting left routing bytes to {}",
-                                     bytes::BUFSIZE - ENCRYPTEDPAYLOAD_LENGTH - ROUTE_COUNT*ROUTING_OVERHEAD));
+            buffer.annotate(&format!("Shifting left routing bytes"));
         }
     }
     // At this stage, plaintext should be set up for the innermost

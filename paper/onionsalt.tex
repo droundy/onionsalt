@@ -16,15 +16,17 @@
 
 \begin{abstract}
   In this paper, I introduce a layered ``onion'' encryption scheme
-  based on the NaCl library.  The onion salt protocol uses unmodified
-  NaCl decryption for each layer, a padding scheme that ensures that
-  no intermediate agent can determine their own position in the
-  sequence.  Nevertheless, each agent is able to ensure that the
-  message was transmitted without modification, as in the standard
-  NaCl \verb!crypto_box_open! function.  I achieve this result by
-  padding the \emph{ciphertext} with zeros during each decryption,
-  with the resulting plaintext providing the expansion needed at the
-  next level.
+  based on the NaCl library.  The onion salt protocol uses a slightly
+  modified NaCl decryption for each layer, with a padding scheme that
+  ensures that no intermediate agent can determine their own position
+  in the sequence.  Nevertheless, each agent is able to ensure that
+  the message was transmitted without modification of any routing
+  information, although the payload intended for the recipient is only
+  authenticated by the recipient.  The protocol allows for a
+  round-trip onion with the recipient including a response to the
+  message, with no router able to discern either who originated the
+  messare or who was the recipient, and with each router only knowing
+  the addresses of the routers before and after them in the sequence.
 \end{abstract}
 
 \maketitle
@@ -50,34 +52,39 @@ in which an attacker opens numerous connections.
 
 I introduce in this paper the \emph{onion salt} encryption scheme,
 which uses the Networking and Cryptography library
-(NaCl)~\cite{bernstein2009cryptography} for its grunt work.  This
-protocol creates an onion that is encrypted to $\Nrouter$ ``routers,''
-and 1 ``friend.''  The onion contains plaintext designated for each
-party: routing information for each router, and a secret message for
-the friend.  The original onion can only be decrypted by the first
-router, who thus obtains its routing information and a message
-designated for the next router.  The process continues until the
-friend receives the secret message.  The onion salt encryption scheme
-has the following properties.
+(NaCl)~\cite{bernstein2009cryptography}, with one small modification,
+for its grunt work.  This protocol creates an onion that is encrypted
+to $\Nrouter$ ``routers,'' one of which is the ``recipient.''  The
+onion contains plaintext designated for each party: routing
+information for each router, and in addition a secret message
+(``payload'') for the recipient.  The original onion can only be
+decrypted by the first router, who thus obtains its routing
+information and a message designated for the next router.  The
+recipient in general is not the final receiver of the message, but
+rather has the ability to attach a response payload to the message,
+which can be received and read by originator of the onion, provided
+the originator gives the final router his own address as the next
+router.  The onion salt encryption scheme has the following
+properties.
 \begin{description}
 \item[Secrecy] No eavesdropper without access to a given recipient's
   secret key may determine the plaintext intended for that recipient,
-  even after intercepting the message received by each router and the
-  friend.
+  even after intercepting every transmitted message.
 \item[Authenticity] Each recipient can determine that the message
   received was not modified in any way, with the exception of the
-  \emph{payload}, which must be separately authenticated.
+  \emph{payload}, which is separately authenticated but only by the
+  recipient (and the sender, in case of a response payload).
 \item[Anonymity] No recipient can determine from the content of the
   message they received the identity of any other party involved,
   except for the routing information they may have been provided.  Of
   course, they most likely will also be able to identify who sent them
   the message by examining the transport used.
-\item[Ordering ambiguity] No recipient other than the friend can determine
-  their place in the sequence of onion layers.  This last poses the
-  challenge that motivates this work.  The previous three properties
-  can be achieved simply by nesting NaCl encryption.  However, that
-  would make each message larger than the previous one, making it easy
-  for routers to establish a relative ordering between their messages.
+\item[Ordering ambiguity] No router can determine their place in
+  the sequence of onion layers.  This last poses the challenge that
+  motivates this work.  The previous three properties can be achieved
+  simply by nesting NaCl encryption.  However, that would make each
+  message larger than the previous one, making it easy for routers to
+  establish a relative ordering between their messages.
 \end{description}
 In the following paragraphs I will explain the relevance of each of
 these properties.
@@ -89,19 +96,6 @@ use a modified version, which does \emph{not} authenticate the payload
 content until its reception by its recipient.  This is needed in order
 to enable the recipient to place information in the payload to be
 relayed on.
-
-The authenticity property as we implement it eliminates any potential
-attackes that involve cleverly modifying an intercepted message
-(e.g. flipping a few specific bits) and observing the resulting
-behavior of its recipient, and ultimately compromising the secrecy of
-the message.  A simpler approach would separately authenticate to each
-router just the routing information for that router.  However, this
-would leave open an attack in which one compromised router communicates with a
-later compromised router in the sequence by modifying a few bits of
-its routing information, enabling it to identify packets that match.
-By having each router authenticate \emph{all} the routing information,
-an intermediate uncompromised router would refuse to relay on such a
-modified packet.
 
 \begin{figure*}
   \begin{center}
@@ -121,64 +115,80 @@ modified packet.
     on.}\label{fig:decryption}
 \end{figure*}
 
+The authenticity property as we implement it eliminates any potential
+attackes that involve cleverly modifying an intercepted message
+(e.g. flipping a few specific bits) and observing the resulting
+behavior of its recipient, and ultimately compromising the secrecy of
+the message.  A simpler approach would separately authenticate to each
+router just the routing information for that router.  However, this
+would leave open an attack in which one compromised router
+communicates with a later compromised router in the sequence by
+modifying a few bits of its routing information, enabling it to
+identify packets that match.  By having each router authenticate
+\emph{all} the routing information, an intermediate uncompromised
+router would refuse to relay on such a modified packet.
+
 The \emph{anonymity} of the sender is primarily ensured by generating
 random key pairs for each recipient and transmitting the generated
 public key along with the message.  Because each key pair is used only
 once, although an eavesdropper can extract the public key from each
 message, that information cannot be correlated with the sender.  In
 addition, because each key pair is only used once, a fixed nonce may
-be safely used.  Naturally, the secrecy of each recipient's message is
+be safely used.  Naturally, the secrecy of each router's message is
 also necessary in order to ensure the sender's anonymity.  Also note
 that my definition of anonymity explicitly made no claim regarding
 traffic analysis attacks.  Naturally, if a user's threat model
-includes an observer of network patterns, then additional care care
-(e.g. batching or random delays in transmission) should be used to
+includes an observer of network patterns (which might, for instance,
+be performed by compromised routers), then additional care care---such
+as batching or random delays in transmission---should be used to
 protect against traffic analysis attacks.
 
-Note the the sender may choose whether to remain anonymous to the
+Note that the sender may choose whether to remain anonymous to the
 recipient.  To remain anonymous, the sender would generate a random
 key pair for the payload, while to authenticate her identity, the
-sender would encrypt the payload using her public key, besides the
-unauthenticted encryption using a random key pair.
+sender would encrypt the payload itself using her known public key.
 
 Finally, \emph{ordering ambiguity} while not strictly necessary,
 provides an additional measure of protection of anonymity in the
 presence of malicious routers.  Simple padding with random data would
 provide a limited ordering ambiguity that could prevent a network
-observer from determining ordering.  However, traffic analysis by
-compromised nodes could operate far more effectively when the ordering
-of messages can be determined or estimated, easily eliminating half of
-the false positives.  In the extreme case---where latency and ordering
-are precisely known---a compromise of the first and last router in the
-sequence could effectively remove the anonymity of a message.  This
-property presents a challenge, because each router must believe that
-the entire onion is consists of actual uncompromised data.  The
-solution is clearly that each router must pad the data it sends on
-with pseudorandom padding that is known to the original sender, but
-not knowable to any other party.  Then the sender can create
-authentication data for each recipient that authenticates not only the
-actual importand content, but also the padding.
+observer from determining ordering.  However, if each router knew how
+much authenticated data remained, traffic analysis by compromised
+nodes could operate far more effectively when the ordering of messages
+can be determined or estimated, easily eliminating half of the false
+positives.  In the extreme case---where latency and ordering are
+precisely known---a compromise of just a few routers in the sequence
+could effectively remove the anonymity of a message.  This property
+presents a challenge, because each router must be able to believe that
+the entire routing portion of the onion consists of actual
+uncompromised data.  Our solution is that each router must pad the
+data it sends on with pseudorandom padding that is known to the
+original sender, but not knowable to any other party.  Then the sender
+can create authentication data for each recipient that authenticates
+not only the actual important content, but also the padding.
 
 \section{Decryption as a router}
 
-I will begin with the decryption algorithm, illustrated in
-Fig.~\ref{fig:decryption}, which is simpler than encryption.
-Decryption consists of just three steps.
+I will begin with the decryption algorithm for an ordinary router,
+illustrated in Fig.~\ref{fig:decryption}, which is simpler than
+encryption.  Decryption consists of just three steps.
 \begin{enumerate}
-\item First the public key (which occupies the first 32 bytes) is
-  removed from the message.  The message is then padded at the
-  beginning with 16 bytes of zeros (as required by
-  \verb!crypto_box_open!), and just before the payload with 48 bytes
+\item First the randomly-generated public key (which occupies the
+  first 32 bytes) is read and removed from the message.  The message
+  is then padded at the beginning with 16 bytes of zeros (as required
+  by NaCl), and is zero-padded just before the payload with 48 bytes
   plus the size of the routing information.
 \item The padded message is passed to a modified version of the NaCl
   function \verb!crypto_box_open! with a zero nonce, which decrypts
-  and authenticates all but the final payload portion of the message,
-  in the process encrypting the zero padding that was inserted in the
-  middle.  We note that in practice we modify the TweetNaCl
-  implementation for simplicity~\cite{bernstein2014tweetnacl}.
-\item Finally, the routing information is read and stripped off,
-  leaving a message of the same size as the original, padded with
-  pseudorandom data in the center.
+  the entire message, and authenticates all but the final payload
+  portion of the message, in the process encrypting the zero padding
+  that was inserted in the middle.  We note that in practice we modify
+  the TweetNaCl implementation of NaCl for
+  simplicity~\cite{bernstein2014tweetnacl}.
+\item Finally, the decrypted routing information is read and stripped
+  off, leaving a message of the same size as the original, padded with
+  pseudorandom data in the center, and with the next
+  randomly-generated public key at the beginning.
 \end{enumerate}
 One unusual feature of this scheme is the the \emph{ciphertext} is
 padded with zeros in its interior prior to decryption and
@@ -207,9 +217,9 @@ apply to the final portion of the message.
 
 \section{The encryption algorithm}
 
-The first step in creating an onion salt is to generate one emphemeral
+The first step in creating an onion salt is to generate one ephemeral
 key pair for each recipient.  These keys will be used for each
-encryption.  A cartoon of the algorithm is shown in
+encryption.  A cartoon of the process is shown in
 Fig.~\ref{fig:algorithm}.  The encryption process is naturally more
 complicated than decryption, since it must deal with all layers.  The
 encryption proceeds in two stages.  First, the padding is constructed,
@@ -217,27 +227,31 @@ and then the plaintext for all the recipients is inserted and
 encrypted.  The first stage consists of the following steps, starting
 with a message full of zeros.
 \begin{enumerate}
-\item Zero-pad the message on the right with 48 bytes plus the size of
-  the routing information, as in the decryption, and shift the entire
-  message to the left by the same amount to maintain its length.
+\item Shift the routing information to the left by 48 bytes plus the
+  size of the routing information, and zero-fill the gap that was thus
+  opened up.
 \item Encrypt the resulting plaintext to the next recipient.
-\item Repeat this process once for each recipient, including the
-  friend.
+\item Repeat this process once for each router, including the
+  recipient.
 \end{enumerate}
 Once we have generated the padding, we need to insert the plaintext
-content (the secret message and the routing information) and encrypt.
-This process involves:
+content (the secret message payload and the routing information) and
+encrypt.  This process involves:
 \begin{enumerate}
-\item Insert the plaintext secret message.
-\item The message (including the zero padding at the end) is then
-  encrypted to the recipient of the currently-constructed message.  If
-  no mistakes have been made, this encryption will result in zeros at
-  the end of the message, which naturally will not be transmitted.
-\item Shift the data to the right to eliminate the zeros, and then add
-  the plaintext content consisting of the routing information for the
-  next recipient and the ephemeral public key that recipient will use
-  when decrypting.
-\item Return to step 2, if there is another router.
+\item Insert the plaintext routing information for the current router.
+  If this is the recipient, then also insert the payload, \emph{after}
+  encrypting it to them with a user-specified key pair, using the
+  randomly-generated emphemeral public key as a nonce.
+\item The message is then encrypted to the recipient of the
+  currently-constructed message.  If no mistakes have been made, this
+  encryption will result in zeros at the end of the routing
+  information.
+\item Shift the routing information to the right to eliminate the gap
+  of zeros, and then add the plaintext content consisting of the
+  routing information for the next recipient and the ephemeral public
+  key that recipient will use when decrypting.
+\item Return to step 1, if there is another router.  FIXME I HAVE
+  EDITED UP TO HERE!
 \end{enumerate}
 As in the case of decryption, the NaCl \texttt{crypto\_box} encryption
 routine requires zero padding at the beginning of the message as well
