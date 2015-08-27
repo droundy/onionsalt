@@ -136,10 +136,10 @@ fn core(inp: &[u8; 16], k: &[u8; 32], c: &[u8; 16])
         -> ([Wrapping<u32>; 16], [Wrapping<u32>; 16]) {
     let mut x: [Wrapping<u32>; 16] = [Wrapping(0); 16];
     for i in 0..4 {
-        x[5*i] = ld32(array_ref![c, 4*i, u8, 4]);
-        x[1+i] = ld32(array_ref![k, 4*i, u8, 4]);
-        x[6+i] = ld32(array_ref![inp, 4*i, u8, 4]);
-        x[11+i] = ld32(array_ref![k, 16+4*i, u8, 4]);
+        x[5*i] = ld32(array_ref![c, 4*i, 4]);
+        x[1+i] = ld32(array_ref![k, 4*i, 4]);
+        x[6+i] = ld32(array_ref![inp, 4*i, 4]);
+        x[11+i] = ld32(array_ref![k, 16+4*i, 4]);
     }
 
     let mut y: [Wrapping<u32>; 16] = [Wrapping(0); 16];
@@ -174,7 +174,7 @@ fn core_salsa20(inp: &[u8; 16], k: &[u8; 32], c: &[u8; 16]) -> [u8; 64] {
 
     let mut out: [u8; 64] = [0; 64];
     for i in 0..16 {
-        st32(array_mut_ref!(out, 4*i, u8, 4),x[i] + y[i]);
+        st32(array_mut_ref!(out, 4*i, 4),x[i] + y[i]);
     }
     out
 }
@@ -187,12 +187,12 @@ fn core_hsalsa20(n: &[u8; 16], k: &[u8; 32], c: &[u8; 16]) -> [u8; 32] {
         x[i] = x[i] + y[i];
     }
     for i in 0..4 {
-        x[5*i] = x[5*i] - ld32(array_ref![c, 4*i, u8, 4]);
-        x[6+i] = x[6+i] - ld32(array_ref!(n, 4*i, u8, 4));
+        x[5*i] = x[5*i] - ld32(array_ref![c, 4*i, 4]);
+        x[6+i] = x[6+i] - ld32(array_ref!(n, 4*i, 4));
     }
     for i in 0..4 {
-        st32(array_mut_ref!(out, 4*i, u8, 4),x[5*i]);
-        st32(array_mut_ref!(out, 16+4*i, u8, 4),x[6+i]);
+        st32(array_mut_ref!(out, 4*i, 4),x[5*i]);
+        st32(array_mut_ref!(out, 16+4*i, 4),x[6+i]);
     }
     out
 }
@@ -247,16 +247,16 @@ fn stream_salsa20(c: &mut[u8], d: u64, n: &[u8; 16], k: &[u8; 32])
 // in tweetnacl.
 fn stream_32(n: &Nonce, k: &[u8; 32])
              -> Result<[u8; 32], NaClError> {
-    let s = core_hsalsa20(array_ref![n.0, 0, u8, 16], k, SIGMA);
+    let s = core_hsalsa20(array_ref![n.0, 0, 16], k, SIGMA);
     let mut c: [u8; 32] = [0; 32];
-    try!(stream_salsa20(&mut c,32,array_ref![n.0, 16, u8, 16],&s));
+    try!(stream_salsa20(&mut c,32,array_ref![n.0, 16, 16],&s));
     Ok(c)
 }
 
 fn stream_xor(c: &mut[u8], m: &[u8], d: u64, n: &Nonce, k: &[u8; 32])
                          -> Result<(), NaClError> {
-    let s = core_hsalsa20(array_ref![n.0, 0, u8, 16], k, SIGMA);
-    stream_salsa20_xor(c,m,d,array_ref![n.0, 16, u8, 16],&s)
+    let s = core_hsalsa20(array_ref![n.0, 0, 16], k, SIGMA);
+    stream_salsa20_xor(c,m,d,array_ref![n.0, 16, 16],&s)
 }
 
 fn add1305(h: &mut[u32], c: &[u32]) {
@@ -295,6 +295,7 @@ use std;
 pub enum NaClError {
     AuthFailed,
     InvalidInput,
+    WrongKey,
     IOError(std::io::Error),
 }
 impl std::convert::From<std::io::Error> for NaClError {
@@ -557,7 +558,7 @@ pub fn secretbox_open(m: &mut[u8], c: &[u8], n: &Nonce, k: &[u8; 32])
         return Err(NaClError::InvalidInput);
     }
     let x = try!(stream_32(n,k));
-    try!(onetimeauth_verify(array_ref!(c, 16, u8, 16), &c[32..], &x));
+    try!(onetimeauth_verify(array_ref!(c, 16, 16), &c[32..], &x));
     try!(stream_xor(m,c,d,n,k));
     for i in 0..32 {
         m[i] = 0;
@@ -621,7 +622,7 @@ pub fn funnybox_open(m: &mut[u8], c: &[u8], nauth: usize, n: &Nonce, k: &[u8; 32
         return Err(NaClError::InvalidInput);
     }
     let x = try!(stream_32(n,k));
-    try!(onetimeauth_verify(array_ref!(c, 16, u8, 16), &c[32..32+nauth], &x));
+    try!(onetimeauth_verify(array_ref!(c, 16, 16), &c[32..32+nauth], &x));
     try!(stream_xor(m,c,d,n,k));
     for i in 0..32 {
         m[i] = 0;
@@ -879,7 +880,7 @@ pub fn box_beforenm<PK: ToPublicKey + ?Sized,
     let y = try!(pk.to_public_key());
     let mut s: [u8; 32] = [0; 32];
     scalarmult(&mut s,&x.0,&y.0);
-    Ok(core_hsalsa20(array_ref![_0, 0, u8, 16],&s,SIGMA))
+    Ok(core_hsalsa20(array_ref![_0, 0, 16],&s,SIGMA))
 }
 
 /// Encrypt a message after creating a secret key using
@@ -898,7 +899,20 @@ pub fn box_up<N: ToNonce,
                                n: &N, pk: &PK, sk: &SK)
                                -> Result<(), NaClError> {
     let k = try!(box_beforenm(pk,sk));
-    box_afternm(c, m, &try!(n.to_nonce()), &k)
+    println!("box_up key is {} with length {}", PublicKey(k), m.len());
+    println!("box_up nonce is {}", PublicKey(try!(n.to_nonce()).0));
+    try!(box_afternm(c, m, &try!(n.to_nonce()), &k));
+    for i in 0..c.len() {
+        if i % 8 == 0 {
+            print!(" ");
+        }
+        if i % 48 == 0 {
+            println!("");
+        }
+        print!("{:02x}", c[i]);
+    }
+    print!("");
+    Ok(())
 }
 
 /// Decrypt a message using a key that was precomputed using
@@ -917,6 +931,18 @@ pub fn box_open<N: ToNonce,
                                  n: &N, pk: &PK, sk: &SK)
                                  -> Result<(), NaClError> {
     let k = try!(box_beforenm(pk,sk));
+    println!("box_open key is {} with length {}", PublicKey(k), m.len());
+    println!("box_open nonce is {}", PublicKey(try!(n.to_nonce()).0));
+    for i in 0..c.len() {
+        if i % 8 == 0 {
+            print!(" ");
+        }
+        if i % 48 == 0 {
+            println!("");
+        }
+        print!("{:02x}", c[i]);
+    }
+    println!("");
     box_open_afternm(m, c, &try!(n.to_nonce()), &k)
 }
 
@@ -956,7 +982,7 @@ pub fn sillybox_beforenm<PK: ToPublicKey + ?Sized,
     let y = try!(pk.to_public_key());
     let mut s: [u8; 32] = [0; 32];
     scalarmult(&mut s,&x.0,&y.0);
-    Ok(core_hsalsa20(array_ref![_0,0,u8,16],&s,SIGMA))
+    Ok(core_hsalsa20(array_ref![_0,0,16],&s,SIGMA))
 }
 
 /// Encrypt a message after creating a secret key using

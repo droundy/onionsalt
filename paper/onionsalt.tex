@@ -82,12 +82,13 @@ has the following properties.
 In the following paragraphs I will explain the relevance of each of
 these properties.
 
-\emph{Secrecy} and \emph{authenticity}are at the core of any secure
+\emph{Secrecy} and \emph{authenticity} are at the core of any secure
 communication scheme.  These are the two properties provided by the
 NaCl \verb!crypto_box! function which we use.  However, we actually
 use a modified version, which does \emph{not} authenticate the payload
-content.  This is needed in order to enable the recipient to place
-information in the payload to be relayed on.
+content until its reception by its recipient.  This is needed in order
+to enable the recipient to place information in the payload to be
+relayed on.
 
 The authenticity property as we implement it eliminates any potential
 attackes that involve cleverly modifying an intercepted message
@@ -133,6 +134,12 @@ traffic analysis attacks.  Naturally, if a user's threat model
 includes an observer of network patterns, then additional care care
 (e.g. batching or random delays in transmission) should be used to
 protect against traffic analysis attacks.
+
+Note the the sender may choose whether to remain anonymous to the
+recipient.  To remain anonymous, the sender would generate a random
+key pair for the payload, while to authenticate her identity, the
+sender would encrypt the payload using her public key, besides the
+unauthenticted encryption using a random key pair.
 
 Finally, \emph{ordering ambiguity} while not strictly necessary,
 provides an additional measure of protection of anonymity in the
@@ -262,16 +269,17 @@ as at the end, introducing a bit more bookkeeping.
 
 \section{Decryption and responding as recipient}
 
-The purpose of \emph{not} authenticating the payload is to enable the
-recipient to send a response without giving the recipient any
-information about the sender beyond what is included in the payload.
-Specifically, the recipient cannot determine who the sender is.
-Moreover, no party other than the recipient (which includes the other
-routers, and any network observer) can determine which router is the
-recipient, provided the routers incorporate a fixed (or randomized)
-delay in their forwarding on of the message, such that the recipient
-has time to read the payload and encrypt the response before the
-packet would otherwise be expected to be sent to the following router.
+The purpose of \emph{not} authenticating the payload at each layer of
+the onion is to enable the recipient to send a response without giving
+the recipient any information about the sender beyond what is included
+in the payload.  Specifically, the recipient cannot determine who the
+sender is.  Moreover, no party other than the recipient (which
+includes the other routers, and any network observer) can determine
+which router is the recipient, provided the routers incorporate a
+fixed (or randomized) delay in their forwarding on of the message,
+such that the recipient has time to read the payload and encrypt the
+response before the packet would otherwise be expected to be sent to
+the following router.
 
 Figure~\ref{fig:decryption-and-responding} shows a cartoon of the
 entire sequence of messages passed between all routers following the
@@ -315,6 +323,9 @@ address.  The sender will decrypt the response by encrypting it (or
 decrypting without authentication) to each of the keys of the routers
 following the recipient.  This will restore the response to what the
 recipient inserted, which can then be decrypted and authenticated.
+
+FIXME I NEED TO EDIT THIS TO REFLECT THE ENCYPTION AND AUTHENTICATION
+OF THE PAYLOAD, INCLUDING NONCES.
 
 \section{Extensions}
 

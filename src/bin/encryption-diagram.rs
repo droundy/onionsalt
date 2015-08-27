@@ -25,11 +25,8 @@ fn create_short_diagram() {
     let keys_and_routes = [(pairs[0].public, *b"123456789012345612345678"),
                            (pairs[1].public, *b"my friend is hermy frien"),
                            (pairs[2].public, *b"address 3 for yoaddress ")];
-    let mut payload: [u8; PAYLOAD_LENGTH] = [0; PAYLOAD_LENGTH];
     let recipient = 1;
-    payload[3] = 3;
-    let payload = payload;
-    onionbox_algorithm(&mut diagram, &mut return_key, &keys_and_routes, &payload, recipient).unwrap();
+    onionbox_algorithm(&mut diagram, &mut return_key, &keys_and_routes, recipient).unwrap();
 
     for i in 0..pairs.len() {
         diagram.annotate(&format!("Message as received by {}", i));
@@ -38,11 +35,11 @@ fn create_short_diagram() {
 
         if i == recipient {
             // We are the recipient!
-            let mut response: [u8; PAYLOAD_LENGTH] = [0; PAYLOAD_LENGTH];
+            let mut response: [u8; ENCRYPTEDPAYLOAD_LENGTH] = [0; ENCRYPTEDPAYLOAD_LENGTH];
             for j in 0..PAYLOAD_LENGTH {
                 response[j] = j as u8;
             }
-            onionbox_insert_payload_algorithm(&mut diagram, &response);
+            onionbox_insert_response_algorithm(&mut diagram, &response);
         }
     }
     let mut f = File::create("paper/short-onion.eps").unwrap();
@@ -68,10 +65,7 @@ fn create_big_diagram() {
                               (pairs[3].public, *b"another is - heranother "),
                               (pairs[4].public, *b"router here is orouter h"),
                               (pairs[5].public, *b"how to get to mehow to g")];
-    let mut payload: [u8; PAYLOAD_LENGTH] = [0; PAYLOAD_LENGTH];
-    payload[3] = 3;
-    let payload = payload;
-    onionbox_algorithm(&mut diagram, &mut return_key, &keys_and_routes, &payload, 2).unwrap();
+    onionbox_algorithm(&mut diagram, &mut return_key, &keys_and_routes, 2).unwrap();
 
     let mut f = File::create("paper/encryption.eps").unwrap();
     f.write_all(diagram.postscript().as_bytes()).unwrap();
@@ -89,11 +83,11 @@ fn create_big_diagram() {
 
         if i == 2 {
             // We are the recipient!
-            let mut response: [u8; PAYLOAD_LENGTH] = [0; PAYLOAD_LENGTH];
-            for j in 0..PAYLOAD_LENGTH {
+            let mut response: [u8; ENCRYPTEDPAYLOAD_LENGTH] = [0; ENCRYPTEDPAYLOAD_LENGTH];
+            for j in 0..ENCRYPTEDPAYLOAD_LENGTH {
                 response[j] = j as u8;
             }
-            onionbox_insert_payload_algorithm(&mut diagram, &response);
+            onionbox_insert_response_algorithm(&mut diagram, &response);
         }
 
         let mut f = File::create(&format!("paper/decryption-{}.eps", i)).unwrap();
