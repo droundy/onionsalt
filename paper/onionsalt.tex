@@ -241,7 +241,13 @@ encrypt.  This process involves:
 \item Insert the plaintext routing information for the current router.
   If this is the recipient, then also insert the payload, \emph{after}
   encrypting it to them with a user-specified key pair, using the
-  randomly-generated emphemeral public key as a nonce.
+  randomly-generated emphemeral public key as a nonce.  The encryption
+  of the payload uses a potentially different key pair (which is only
+  ephemeral if the message is to be anonymous to the recipient), and
+  uses the randomly-generated and ephemeral public key used for
+  routing as the nonce.  This is intended to statistically ensure the
+  uniqueness of the nonce in case the keys used are static, to avoid
+  reusing a nonce.  GOT TO HERE!
 \item The message is then encrypted to the recipient of the
   currently-constructed message.  If no mistakes have been made, this
   encryption will result in zeros at the end of the routing
@@ -250,12 +256,12 @@ encrypt.  This process involves:
   of zeros, and then add the plaintext content consisting of the
   routing information for the next recipient and the ephemeral public
   key that recipient will use when decrypting.
-\item Return to step 1, if there is another router.  FIXME I HAVE
-  EDITED UP TO HERE!
+\item Return to step 1, if there is another router.
 \end{enumerate}
 As in the case of decryption, the NaCl \texttt{crypto\_box} encryption
-routine requires zero padding at the beginning of the message as well
-as at the end, introducing a bit more bookkeeping.
+routine (even modified to not authenticate the payload portion of the
+message) requires zero padding at the beginning of the message as well
+as in the middle, introducing a bit more bookkeeping.
 
 \begin{figure*}
   \begin{center}

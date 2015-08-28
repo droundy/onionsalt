@@ -588,7 +588,7 @@ int crypto_hash(u8 *out,const u8 *m,u64 n)
 sv add(gf p[4],gf q[4])
 {
   gf a,b,c,d,t,e,f,g,h;
-  
+
   Z(a, p[1], p[0]);
   Z(t, q[1], q[0]);
   M(a, a, t);
@@ -620,7 +620,7 @@ sv cswap(gf p[4],gf q[4],u8 b)
 sv pack(u8 *r,gf p[4])
 {
   gf tx, ty, zi;
-  inv25519(zi, p[2]); 
+  inv25519(zi, p[2]);
   M(tx, p[0], zi);
   M(ty, p[1], zi);
   pack25519(r, ty);
