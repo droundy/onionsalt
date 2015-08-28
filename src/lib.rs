@@ -71,7 +71,8 @@ extern crate arrayref;
 extern crate rand;
 
 pub mod crypto;
-pub mod bytes;
+mod bytes;
+pub mod creatediagrams;
 
 const AUTHENTICATIONBYTES: usize = 16;
 
@@ -328,12 +329,12 @@ pub fn onionbox_open(input: &[u8; PACKET_LENGTH],
 /// **Not for public consumption!** Encrypt a message in an onion
 /// defined by `keys_and_routings`, with `payload` directed to
 /// `payload_recipient`.
-pub fn onionbox_algorithm<T: bytes::SelfDocumenting>(buffer: &mut T,
-                                                     return_key: &mut T,
-                                                     keys_and_routings: &[(crypto::PublicKey,
-                                                                           [u8; ROUTING_LENGTH])],
-                                                     payload_recipient: usize)
-                                                     -> Result<crypto::Nonce, crypto::NaClError> {
+fn onionbox_algorithm<T: bytes::SelfDocumenting>(buffer: &mut T,
+                                                 return_key: &mut T,
+                                                 keys_and_routings: &[(crypto::PublicKey,
+                                                                       [u8; ROUTING_LENGTH])],
+                                                 payload_recipient: usize)
+                                                 -> Result<crypto::Nonce, crypto::NaClError> {
     let route_count = keys_and_routings.len();
     if payload_recipient >= route_count || route_count > ROUTE_COUNT {
         return Err(crypto::NaClError::InvalidInput);
@@ -454,10 +455,10 @@ pub fn onionbox_algorithm<T: bytes::SelfDocumenting>(buffer: &mut T,
 
 /// **Not for public consumption!** The buffer already contains the
 /// message, and contains the next message on exit.
-pub fn onionbox_open_algorithm<T: bytes::SelfDocumenting>(buffer: &mut T,
-                                                          secret_key: &crypto::SecretKey)
-                                                          -> Result<[u8; ROUTING_LENGTH],
-                                                                    crypto::NaClError>
+fn onionbox_open_algorithm<T: bytes::SelfDocumenting>(buffer: &mut T,
+                                                      secret_key: &crypto::SecretKey)
+                                                      -> Result<[u8; ROUTING_LENGTH],
+                                                                crypto::NaClError>
 {
     let pk: &[u8] = &buffer.get_bytes(0, 32);
     buffer.move_bytes(ROUTE_COUNT*ROUTING_OVERHEAD,
@@ -487,8 +488,8 @@ pub fn onionbox_open_algorithm<T: bytes::SelfDocumenting>(buffer: &mut T,
 }
 
 /// **Not for public consumption!**
-pub fn onionbox_insert_response_algorithm<T: bytes::SelfDocumenting>(buffer: &mut T,
-                                                                    payload: &[u8; ENCRYPTEDPAYLOAD_LENGTH]) {
+fn onionbox_insert_response_algorithm<T: bytes::SelfDocumenting>(buffer: &mut T,
+                                                                 payload: &[u8; ENCRYPTEDPAYLOAD_LENGTH]) {
     buffer.set_bytes(bytes::BUFSIZE - ENCRYPTEDPAYLOAD_LENGTH - 32 - ROUTING_LENGTH,
                      ENCRYPTEDPAYLOAD_LENGTH, payload, "Response");
     buffer.annotate(&format!("Read payload and replace with response"));

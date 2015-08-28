@@ -239,9 +239,9 @@ impl Diagram {
     pub fn postscript(&self) -> String {
         self.postscript_header() + &self.postscript
     }
-    pub fn asciiart(&self) -> String {
-        self.asciiart.clone()
-    }
+    // pub fn asciiart(&self) -> String {
+    //     self.asciiart.clone()
+    // }
     fn postscript_reset(&mut self) {
         self.postscript = String::new();
         self.postscript_height = 10;

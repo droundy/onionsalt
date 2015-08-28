@@ -3,27 +3,39 @@
 from __future__ import print_function
 import string, os, sys, platform
 
+def cargo(cmd):
+    print('| cargo', cmd)
+    print('''C ~/.cargo
+c ~
+c .py
+c .tex
+c .log
+c .fac
+c .tum
+c .test
+c .rlib
+c .lock
+C paper
+C target/debug/deps
+C target/debug/.fingerprint
+C target/release/deps
+C target/release/.fingerprint
+C .git''')
+
 if os.getenv('MINIMAL') == None and not os.system('echo -n "# " && cargo --version'):
     print('# Cargo works!')
-    print('| cargo build && cargo doc && cargo test')
-    print('C ~/.cargo')
-    print('c ~')
-    print('c .py')
-    print('c .tex')
-    print('c .log')
-    print('c .fac')
-    print('c .tum')
-    print('c .test')
-    print('c .rlib')
-    print('C paper')
-    print('C target/debug/deps')
-    print('C target/debug/.fingerprint')
-    print('C target/release/deps')
-    print('C target/release/.fingerprint')
-    print('C .git')
-    print()
-    print('| target/debug/encryption-diagram')
-    print('< target/debug/encryption-diagram')
+    cargo('build --release')
+    print('> target/release/encryption-diagram\n')
+    cargo('doc')
+    # doc doesn't actually depend on encryption-diagram, but I'm not
+    # sure if it's safe to concurrently run two cargo commands.
+    print('< target/release/encryption-diagram')
+    print('> target/doc/onionsalt/index.html\n')
+    cargo('test')
+    print('< target/doc/onionsalt/index.html\n')
+
+    print('| target/release/encryption-diagram')
+    print('< target/release/encryption-diagram')
     print()
     for i in range(6):
         print('| epstopdf paper/decryption-%d.eps' % i)
