@@ -247,7 +247,7 @@ encrypt.  This process involves:
   uses the randomly-generated and ephemeral public key used for
   routing as the nonce.  This is intended to statistically ensure the
   uniqueness of the nonce in case the keys used are static, to avoid
-  reusing a nonce.  GOT TO HERE!
+  reusing a nonce.
 \item The message is then encrypted to the recipient of the
   currently-constructed message.  If no mistakes have been made, this
   encryption will result in zeros at the end of the routing
@@ -260,8 +260,8 @@ encrypt.  This process involves:
 \end{enumerate}
 As in the case of decryption, the NaCl \texttt{crypto\_box} encryption
 routine (even modified to not authenticate the payload portion of the
-message) requires zero padding at the beginning of the message as well
-as in the middle, introducing a bit more bookkeeping.
+message) requires zero padding at the beginning of the message in
+addition to that which we add in the middle.
 
 \begin{figure*}
   \begin{center}
@@ -292,20 +292,23 @@ as in the middle, introducing a bit more bookkeeping.
 The purpose of \emph{not} authenticating the payload at each layer of
 the onion is to enable the recipient to send a response without giving
 the recipient any information about the sender beyond what is included
-in the payload.  Specifically, the recipient cannot determine who the
-sender is.  Moreover, no party other than the recipient (which
-includes the other routers, and any network observer) can determine
-which router is the recipient, provided the routers incorporate a
-fixed (or randomized) delay in their forwarding on of the message,
-such that the recipient has time to read the payload and encrypt the
-response before the packet would otherwise be expected to be sent to
-the following router.
+in the payload, and moreover without allowing any other router to
+determine if it precedes or follows the recipient.  Specifically, the
+recipient cannot determine who the sender is (unless such information
+is included in the payload).  Moreover, no party other than the
+recipient (which includes the other routers, and any network observer)
+can determine which router is the recipient, provided care is taken to
+avoid timing attacks, for instance by incorporating a fixed (or
+randomized) delay in the forwarding of messages, such that the
+recipient has time to read the payload and encrypt the response before
+the packet would otherwise be expected to be sent to the following
+router.
 
-Figure~\ref{fig:decryption-and-responding} shows a cartoon of the
-entire sequence of messages passed between all routers following the
-first one, which was already shown in Fig.~\ref{fig:decryption}.  Note
-that the colored patterns representing encryption with various keys is
-consistend across
+Figure~\ref{fig:decryption-and-responding} illustrates the entire
+sequence of messages passed between all routers following the first
+one, which was already shown in Fig.~\ref{fig:decryption}.  Note that
+the colored patterns representing encryption with various keys are
+consistent across
 Figs.~\ref{fig:decryption}-\ref{fig:decryption-and-responding},
 representing the encryption of a single onion, followed by transmision
 and decryption through the circuit.
@@ -313,10 +316,10 @@ and decryption through the circuit.
 The recipient has a somewhat more convoluted process than would
 otherwise be required to insert the payload, because it is assumed
 that the recipient will not recognize her role as recipient until
-decrypting and reading the routing information, which may be presumed
-to include a flag indicating that she is the recipient, and should
-therefore examine the payload.  An alternative approach that would be
-more resistent to timing attacks---but less resistent to
+after decrypting and reading the routing information, which may be
+presumed to include a flag indicating that she is the recipient, and
+should therefore examine the payload.  An alternative approach that
+would be more resistent to timing attacks---but less resistent to
 denial-of-service (DOS) attacks---would be have each router attempt to
 decrypt the payload to its secret key, and use the authentication of
 that decryption to determine whether they are the recipient.  On the
@@ -326,26 +329,23 @@ determined time (e.g. a random interval after receiving the packet, or
 a time specified in the routing information).
 
 The reciever, once she has identified herself as such, can immediately
-examine the payload, which presumably is itself encrypted, and
-certainly must be authenticated.  Having done so, she constructs her
-response, presumably also encrypted and authenticated.  We assume that
-the response payload is encrypted and indistinguishable from random,
-and we therefore simply overwrite the original payload.  This
-encryption is not reflected in the figure, since it is not part of the
-onion salt protocol itself.  One option would be for the recipient to
-encrypt her response to the sender's ephemeral public key using NaCl
-with a different nonce, either a random one, or perhaps a value of 1.
+examine the payload, which presumably is itself encrypted and
+authenticated to her public key.  Having done so, she constructs her
+response, which is also encrypted and authenticated.  The response is
+encrypted to the same key that encrypted the original payload, but
+with a random nonce, which is included at the beginning of the
+response.  Because the response payload is encrypted and
+indistinguishable from random, we simply overwrite the original
+payload without applying an additional layer of encryption.  For
+simplicity, this encryption is not reflected in the figure.
 
 The subsequent routers (routers 3, 4, and 5 in our example) are
 unaware that they are relaying a response rather than the original
-payload.  We presume that the final router is given the sender's
+payload.  In the usual case, the final router is given the sender's
 address.  The sender will decrypt the response by encrypting it (or
 decrypting without authentication) to each of the keys of the routers
 following the recipient.  This will restore the response to what the
 recipient inserted, which can then be decrypted and authenticated.
-
-FIXME I NEED TO EDIT THIS TO REFLECT THE ENCYPTION AND AUTHENTICATION
-OF THE PAYLOAD, INCLUDING NONCES.
 
 \section{Extensions}
 
@@ -354,13 +354,13 @@ recieve and respond to different portions of the payload.  To achieve
 this, the routing information would inform each router which
 randomized portion of the payload to read and respond to. This could
 enable collection of information from an entire circuit in one
-message.  The procedure would be essentially identical to the
+message.  The procedure would be similar in essence to the
 single-recipient case, and we will consider it no further in this
 paper.
 
 Another alternative is that the circuit need not return to the
 original sender.  One could either use the protocol to send
-information in just one direction, or the sender could cause the
+information in a single direction, or the sender could cause the
 recipient to relay information to a third party.  The latter would
 require a second message to inform the third party of the shared
 secrets needed to decrypt the ``response.''
@@ -377,20 +377,53 @@ NaCl to provide the desired secrecy and authentication.
 
 One such feature is the use of a zero nonce.  I believe this is safe
 because we only use each key pair to send a single message.
+Similarly, the use of the ephemeral public key as nonce for the
+encryption of the payload should be safe because it is an essentially
+random sequence of 32 bytes, which has negligible chance of
+collision.  Finally, the use of a purely random nonce for the
+encryption of the response should be safe for the same reason.
 
-The primary risk that I see in this scheme is in whether the choice of
-padding could introduce a flaw in the encryption properties.  In
-particular, we encrypt twice with the same key pair and nonce, which
-has the potential for danger when using stream ciphers.  However, the
-only bytes that are encrypted twice which we use are those that were
-originally zero.  The recipient of padded bytes generated using this
-encryption gains the same knowledge about our stream cipher that an
-opponent would gain using a known-plaintext attack.  Because I believe
-the Salsa20 stream cipher is resistent to known-plaintext attacks, I
-also believe that there should not be an exploit that can take
-advantage of the nature of this padding.
+There are two more challenging risks in this scheme, because they are
+significant deviations from the standard NaCl scheme.  The first is
+the unusual use of padding to ensure that a block of \emph{ciphertext}
+is zero.  The second is the partial authentication that allows
+modification of the payload block by the responder.
 
-Another question is that of timing attacks.  NaCl itself is
+The zero padding means that we encrypt twice with the same key pair
+and nonce, which has the potential for danger when using stream
+ciphers.  However, the only bytes that are encrypted twice which we
+use are those that were originally zero.  The recipient of padded
+bytes generated using this encryption gains the same knowledge about
+our stream cipher that an opponent would gain using a known-plaintext
+attack.  Because I believe the Salsa20 stream cipher is resistent to
+known-plaintext attacks, I also believe that there should not be an
+exploit that can take advantage of the nature of this padding.
+
+The second risk is in the modification to not authenticate the payload
+portion of the message.  This could lead to an attack in which a
+router modifies the payload.  One such attack would be an attack
+involving a malicious recipient cooperating with a malicious router.
+The router xors the payload with a given byte sequence.  When the
+recipient observes that the payload fails to authenticate, then the
+recipient xors the payload with that byte sequence, and when the
+message does authenticate, has confirmed that this was the same
+message that had been forwarded by the router.  Thus in spite of one
+or more honest routers in between them, they could connect a payload
+sent to the recipient with the node that sent the message to the first
+router.  This is a variant of the same attack that authenticating the
+total routing information was intended to prevent.  However, this
+attack requires that an attacker control the recipient, which
+statistically gives considerably less power than the router-router
+version.  This attack does require that the malicious router modify
+the payload prior to knowing with confidence that the message might be
+interesting.  Moreover, attempts to perform this attack can be
+detected, since if the recipient turns out to not be malicious, the
+message will not be received, that the sender will be forced to assume
+(correctly) that one of the routers was unreliable.  Thus it is
+possible that this attack will be alleviated by having nodes evaluate
+the reliablility of routers prior to sending sensitive information.
+
+Another final question is that of timing attacks.  NaCl itself is
 constructed to be resistant to such attacks, because branches never
 depend on secret data, and array indexing never depends on secret
 data.  A timing attack on the creation of an onion could certainly
@@ -398,18 +431,21 @@ reveal how many layers it has, and possibly some information about the
 slowness of the random byte generator, but should not reveal any more
 information.  Decryption of a single layer by a router should happen
 in fixed time, independent of the data involved, and thus should be
-resistant to timing attacks.  Of course, the timing of the actual
-routing process will likely be very dependent on the secret content,
-but that must be addressed at a different level of the protocol.
+resistant to timing attacks, except that a recipient will need to
+spend more time to analyze data and respond.  Thus a protocol using
+onion salt encryption should implement additional protection from
+timing attacks.
 
-\section{Cost}
+\section{Computational cost}
 
-The cost to create an onion approximately twice the cost to encrypt an
-equal-sized message to each recipient.  A more efficient
-implementation would avoid generating the authentication codes while
-preparing the padding, and would only generate the shared symmetric
-key once.  These optimizations will not affect the resistence to
-timing attacks, and can safely be left for a later improvement.
+The cost to create an onion costs approximately $\Nrouter+1$ times the
+cost to encrypt an equal-sized message to each recipient.  A router's
+decryption costs essentially the same as an NaCl
+\verb!crypto_box_open! decryption, which is quite fast.  The recipient
+performs one additional decryption, plus \verb!crypto_box! encryption
+of the response.  I anticipate that these computational costs will be
+entirely within reason, and will be dwarfed by the network costs of
+relaying a message through multiple routers.
 
 \section{Conclusions}
 
@@ -417,11 +453,17 @@ I have introduced a new encryption protocol, onion salt, which creates
 a nested sequence of encryptions suitable for onion-style routing of
 fixed-size packets without handshake or prior shared secrets.  This
 protocol has the properties of secrecy, authentication of each layer,
-anonymity, and order ambiguity.  The latter means that routers are
-unable to determine their position in the sequence.  The cost of this
-order ambiguity is in padding of data, as well as increasing the
-amount of data that need be encrypted.  I believe this scheme could be
-valuable for low-bandwidth anonymous communications.
+anonymity, and order ambiguity.  Moreover, it allows for a response to
+be relayed to the original sender without the recipient being able to
+learn the identity or network address of the sender.  Order ambiguity
+means that routers are unable to determine their position in the
+sequence, and in particular cannot determine which router is the
+sender or recipient.  The cost of this order ambiguity is in padding
+of data, as well as increasing the amount of data that need be
+encrypted.  I believe this scheme could be valuable for low-bandwidth
+anonymous communication, in which the overhead of a hand-shake
+protocol would both dominate the network traffic and increase
+vulnerability to attacks by compromised routers or a network observer.
 
 %% Tarzan is a low-latency peer-to-peer anonymizing layer that acts at
 %% the IP level~\cite{freedman2002tarzan}.  The second-generation Tor
@@ -439,18 +481,18 @@ valuable for low-bandwidth anonymous communications.
 
 \bibliography{onionsalt}% Produces the bibliography via BibTeX.
 
-\appendix
+%% \appendix
 
-\begin{widetext}
+%% \begin{widetext}
 
-\section{onionsalt.h}
+%% \section{onionsalt.h}
 
-\lstinputlisting[language=C]{../src/onionsalt.h}
+%% \lstinputlisting[language=C]{../src/onionsalt.h}
 
-\section{onionsalt.c}
+%% \section{onionsalt.c}
 
-\lstinputlisting[language=C]{../src/onionsalt.c}
+%% \lstinputlisting[language=C]{../src/onionsalt.c}
 
-\end{widetext}
+%% \end{widetext}
 
 \end{document}

@@ -8,7 +8,7 @@ use super::crypto;
 
 const PRINT_BYTES: usize = 1024;
 
-pub trait SelfDocumenting {
+pub trait SelfDocumenting : Clone {
     fn move_bytes(&mut self, from: usize, to: usize, length: usize);
     fn set_bytes(&mut self, to: usize, length: usize, bytes: &[u8], name: &str);
     fn sillybox_afternm(&mut self, auth_length: usize, n: &crypto::Nonce,
@@ -23,7 +23,15 @@ pub trait SelfDocumenting {
     fn clear(&mut self);
 }
 
-impl SelfDocumenting for [u8; BUFSIZE] {
+pub struct Bytes(pub [u8; BUFSIZE]);
+
+impl Clone for Bytes {
+    fn clone(&self) -> Self {
+        Bytes([0; BUFSIZE])
+    }
+}
+
+impl SelfDocumenting for Bytes {
     fn annotate(&mut self, message: &str) {
         if false {
             print!("{}:\n    ", message);
@@ -31,7 +39,7 @@ impl SelfDocumenting for [u8; BUFSIZE] {
                 if i % 16 == 0 {
                     print!(" ");
                 }
-                print!("{:02x}", self[i]);
+                print!("{:02x}", self.0[i]);
             }
             println!("");
         }
@@ -42,31 +50,31 @@ impl SelfDocumenting for [u8; BUFSIZE] {
         if to < from {
             // non-overlapping or overlapping the right way
             for i in 0..length {
-                self[to+i] = self[from+i];
+                self.0[to+i] = self.0[from+i];
             }
             for i in if from < to + length { to + length } else { from } .. from + length {
-                self[i] = 0;
+                self.0[i] = 0;
             }
         } else if from + length < to {
             // non-overlapping
             for i in 0..length {
-                self[to+i] = self[from+i];
-                self[from+i] = 0;
+                self.0[to+i] = self.0[from+i];
+                self.0[from+i] = 0;
             }
         } else {
             // go backwards
             for i in (0..length).rev() {
-                self[to+i] = self[from+i];
+                self.0[to+i] = self.0[from+i];
             }
             for i in from .. to {
-                self[i] = 0;
+                self.0[i] = 0;
             }
         }
     }
     fn set_bytes(&mut self, to: usize, length: usize, bytes: &[u8], _name: &str) {
         assert!(length == bytes.len());
         for i in 0..length {
-            self[to+i] = bytes[i];
+            self.0[to+i] = bytes[i];
         }
     }
     fn sillybox_afternm(&mut self, auth_length: usize, n: &crypto::Nonce,
@@ -77,17 +85,17 @@ impl SelfDocumenting for [u8; BUFSIZE] {
         //     if i % 16 == 0 {
         //         print!(" ");
         //     }
-        //     print!("{:02x}", self[i]);
+        //     print!("{:02x}", self.0[i]);
         // }
         // println!("");
-        crypto::sillybox_afternm(&mut ciphertext, self, auth_length, n, key).unwrap();
-        *self = ciphertext;
+        crypto::sillybox_afternm(&mut ciphertext, &self.0, auth_length, n, key).unwrap();
+        self.0 = ciphertext;
         // print!("Encrypted to: ({})\n    ", auth_length);
         // for i in 0..auth_length {
         //     if i % 16 == 0 {
         //         print!(" ");
         //     }
-        //     print!("{:02x}", self[i]);
+        //     print!("{:02x}", self.0[i]);
         // }
         // println!("");
     }
@@ -100,31 +108,31 @@ impl SelfDocumenting for [u8; BUFSIZE] {
         //     if i % 16 == 0 {
         //         print!(" ");
         //     }
-        //     print!("{:02x}", self[i]);
+        //     print!("{:02x}", self.0[i]);
         // }
         // println!("");
-        let out = crypto::sillybox_open_afternm(&mut plaintext, self, auth_length, n, key);
-        *self = plaintext;
+        let out = crypto::sillybox_open_afternm(&mut plaintext, &self.0, auth_length, n, key);
+        self.0 = plaintext;
         // print!("Decrypted to:\n    ");
         // for i in 0..auth_length {
         //     if i % 16 == 0 {
         //         print!(" ");
         //     }
-        //     print!("{:02x}", self[i]);
+        //     print!("{:02x}", self.0[i]);
         // }
         // println!("");
         out
     }
     fn get_bytes(&mut self, from: usize, length: usize) -> Vec<u8> {
-        let out = Vec::from(&self[from .. from + length]);
+        let out = Vec::from(&self.0[from .. from + length]);
         for i in from .. from+length {
-            self[i] = 0;
+            self.0[i] = 0;
         }
         out
     }
     fn copy_bytes(&mut self, to: usize, src: &Self, from: usize, length: usize) {
         for i in 0..length {
-            self[to+i] = src[from+i];
+            self.0[to+i] = src.0[from+i];
         }
     }
 }

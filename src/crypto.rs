@@ -899,19 +899,7 @@ pub fn box_up<N: ToNonce,
                                n: &N, pk: &PK, sk: &SK)
                                -> Result<(), NaClError> {
     let k = try!(box_beforenm(pk,sk));
-    println!("box_up key is {} with length {}", PublicKey(k), m.len());
-    println!("box_up nonce is {}", PublicKey(try!(n.to_nonce()).0));
     try!(box_afternm(c, m, &try!(n.to_nonce()), &k));
-    for i in 0..c.len() {
-        if i % 8 == 0 {
-            print!(" ");
-        }
-        if i % 48 == 0 {
-            println!("");
-        }
-        print!("{:02x}", c[i]);
-    }
-    print!("");
     Ok(())
 }
 
@@ -931,18 +919,6 @@ pub fn box_open<N: ToNonce,
                                  n: &N, pk: &PK, sk: &SK)
                                  -> Result<(), NaClError> {
     let k = try!(box_beforenm(pk,sk));
-    println!("box_open key is {} with length {}", PublicKey(k), m.len());
-    println!("box_open nonce is {}", PublicKey(try!(n.to_nonce()).0));
-    for i in 0..c.len() {
-        if i % 8 == 0 {
-            print!(" ");
-        }
-        if i % 48 == 0 {
-            println!("");
-        }
-        print!("{:02x}", c[i]);
-    }
-    println!("");
     box_open_afternm(m, c, &try!(n.to_nonce()), &k)
 }
 
@@ -1302,14 +1278,6 @@ fn hash_works() {
         let hsh = fromhex(hashval);
         let myhsh = hash(&c);
         assert!(hsh.len() == myhsh.len());
-        println!("");
-        for i in 0..myhsh.len() {
-            println!("{:02x}  {:02x}", myhsh[i], hsh[i])
-        }
-        for i in 0..myhsh.len() {
-            println!("comparing {:x} with {:x}", hsh[i], myhsh[i]);
-            assert!(hsh[i] == myhsh[i]);
-        }
     }
     test_hash(b"",
               b"cf83e1357eefb8bdf1542850d66d8007d620e4050b5715dc83f4a921d36ce9ce47d0d13c5d85f2b0ff8318d2877eec2f63b931bd47417a81a538327af927da3e");
