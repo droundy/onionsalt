@@ -197,22 +197,24 @@ impl OpenedOnionBox {
     pub fn routing(&self) -> [u8; ROUTING_LENGTH] {
         self.routing
     }
+    /// The payload public key of the sender (if we are the recipient).
+    pub fn key(&self) -> crypto::PublicKey {
+        crypto::PublicKey(*array_ref![self.packet,PACKET_LENGTH-ENCRYPTEDPAYLOAD_LENGTH,32])
+    }
     /// Attempt to decrypt and authenticate the payload.
     pub fn payload(&self, response_key: &crypto::KeyPair)
                    -> Result<[u8; PAYLOAD_LENGTH], crypto::NaClError> {
         let mut ciphertext = *array_ref![self.packet, PACKET_LENGTH - PAYLOAD_LENGTH - 32,
                                          PAYLOAD_LENGTH + 32];
         *array_mut_ref![ciphertext,0,16] = [0;16];
-        let pubkey = crypto::PublicKey(*array_ref![self.packet, PACKET_LENGTH-ENCRYPTEDPAYLOAD_LENGTH,
-                                                   32]);
         println!("\n-------------------------------------------\n");
-        println!("grabbing payload from          {}", pubkey);
+        println!("grabbing payload from          {}", self.key());
         let mut plaintext = [0; PAYLOAD_LENGTH + 32];
         println!("first 32 bytes {:?}", &ciphertext[0..32]);
         println!("last 32 bytes {:?}", &ciphertext[PAYLOAD_LENGTH..]);
         println!("payload self.payload_nonce is {}", self.payload_nonce);
         try!(crypto::box_open(&mut plaintext, &ciphertext, &self.payload_nonce,
-                              &pubkey, &response_key.secret));
+                              &self.key(), &response_key.secret));
         println!("box_open did not fail");
         Ok(*array_ref![plaintext,32,PAYLOAD_LENGTH])
     }
@@ -232,10 +234,8 @@ impl OpenedOnionBox {
         let response_nonce = crypto::random_nonce().unwrap();
         println!("\nvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv-\n");
         println!("response_nonce is {}", response_nonce);
-        let pubkey = crypto::PublicKey(*array_ref![self.packet, PACKET_LENGTH-ENCRYPTEDPAYLOAD_LENGTH,
-                                                   32]);
-        println!("compare with {}", pubkey);
-        crypto::box_up(&mut ci[16..], &pl, &response_nonce, &pubkey,
+        println!("compare with {}", self.key());
+        crypto::box_up(&mut ci[16..], &pl, &response_nonce, &self.key(),
                        &response_key.secret).unwrap();
         *array_mut_ref![ci, 0, 32] = response_nonce.0;
         onionbox_insert_response_algorithm(&mut buffer, &ci);
