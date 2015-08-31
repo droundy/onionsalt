@@ -297,10 +297,16 @@ pub enum NaClError {
     InvalidInput,
     WrongKey,
     IOError(std::io::Error),
+    RecvError(std::sync::mpsc::RecvError),
 }
 impl std::convert::From<std::io::Error> for NaClError {
     fn from(e: std::io::Error) -> NaClError {
         NaClError::IOError(e)
+    }
+}
+impl std::convert::From<std::sync::mpsc::RecvError> for NaClError {
+    fn from(e: std::sync::mpsc::RecvError) -> NaClError {
+        NaClError::RecvError(e)
     }
 }
 impl<'a> std::convert::From<&'a str> for NaClError {
