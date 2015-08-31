@@ -303,6 +303,11 @@ impl std::convert::From<std::io::Error> for NaClError {
         NaClError::IOError(e)
     }
 }
+impl<'a> std::convert::From<&'a str> for NaClError {
+    fn from(e: &str) -> NaClError {
+        NaClError::IOError(std::io::Error::new(std::io::ErrorKind::Other, e))
+    }
+}
 
 /// A public key.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
