@@ -28,3 +28,5 @@ Running tests
 You can run the test suite by running
 
     python3 tests/harness.py
+
+[![Build Status](https://travis-ci.org/droundy/onionsalt.svg)](https://travis-ci.org/droundy/onionsalt)
