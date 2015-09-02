@@ -150,14 +150,10 @@ impl OnionBox {
             encrypted[i] ^= simple_key[i];
         }
         let semidecrypted = &mut encrypted;
-        println!("expected       {}", self.payload_recipient_key);
         let response_nonce = crypto::Nonce(*array_ref![semidecrypted,0,32]);
-        println!("response_nonce {}", response_nonce);
         let payload = array_mut_ref![semidecrypted, 16, PAYLOAD_LENGTH+32];
         *array_mut_ref![payload,0,16] = [0;16];
         let mut plain = [0; PAYLOAD_LENGTH+32];
-        println!("payload_nonce is {}", self.payload_nonce);
-        println!("payload public key is {}", payload_key.public);
         try!(crypto::box_open(&mut plain, payload, &response_nonce,
                               &self.payload_recipient_key, &payload_key.secret));
         Ok(*array_ref![plain, 32, PAYLOAD_LENGTH])
@@ -173,8 +169,6 @@ impl OnionBox {
         let mut cipher = [0; ENCRYPTEDPAYLOAD_LENGTH];
         crypto::box_up(&mut cipher[16..], &plain, &self.payload_nonce,
                        &self.payload_recipient_key, &payload_key.secret).unwrap();
-        println!("\nfirst 32 bytes {:?}", &cipher[16..48]);
-        println!("last 32 bytes {:?}", &cipher[PAYLOAD_LENGTH+16..]);
         *array_mut_ref![cipher, 0, 32] = payload_key.public.0;
         for i in 0..ENCRYPTEDPAYLOAD_LENGTH {
             self.packet[PACKET_LENGTH - ENCRYPTEDPAYLOAD_LENGTH + i] ^= cipher[i];
@@ -207,15 +201,9 @@ impl OpenedOnionBox {
         let mut ciphertext = *array_ref![self.packet, PACKET_LENGTH - PAYLOAD_LENGTH - 32,
                                          PAYLOAD_LENGTH + 32];
         *array_mut_ref![ciphertext,0,16] = [0;16];
-        println!("\n-------------------------------------------\n");
-        println!("grabbing payload from          {}", self.key());
         let mut plaintext = [0; PAYLOAD_LENGTH + 32];
-        println!("first 32 bytes {:?}", &ciphertext[0..32]);
-        println!("last 32 bytes {:?}", &ciphertext[PAYLOAD_LENGTH..]);
-        println!("payload self.payload_nonce is {}", self.payload_nonce);
         try!(crypto::box_open(&mut plaintext, &ciphertext, &self.payload_nonce,
                               &self.key(), &response_key.secret));
-        println!("box_open did not fail");
         Ok(*array_ref![plaintext,32,PAYLOAD_LENGTH])
     }
     /// Set `response` to the response payload information.  This is
@@ -232,9 +220,6 @@ impl OpenedOnionBox {
         let mut ci = [0; ENCRYPTEDPAYLOAD_LENGTH];
         *array_mut_ref![pl,32,PAYLOAD_LENGTH] = *response;
         let response_nonce = crypto::random_nonce().unwrap();
-        println!("\nvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv-\n");
-        println!("response_nonce is {}", response_nonce);
-        println!("compare with {}", self.key());
         crypto::box_up(&mut ci[16..], &pl, &response_nonce, &self.key(),
                        &response_key.secret).unwrap();
         *array_mut_ref![ci, 0, 32] = response_nonce.0;
@@ -294,7 +279,6 @@ pub fn onionbox(keys_and_routings: &[(crypto::PublicKey,
     let mut return_key = bytes::Bytes([0; bytes::BUFSIZE]);
     out.payload_nonce = try!(onionbox_algorithm(&mut buffer, &mut return_key,
                                                 keys_and_routings, payload_recipient));
-    println!("payload_nonce in onionbox is {}", out.payload_nonce);
     for i in 0..PACKET_LENGTH {
         out.packet[i] = buffer.0[i];
         out.return_key[i] = return_key.0[i];
@@ -312,8 +296,6 @@ pub fn onionbox_open(input: &[u8; PACKET_LENGTH],
         routing: [0; ROUTING_LENGTH],
         payload_nonce: crypto::Nonce(*array_ref![input, 0, 32]),
     };
-    println!("payload_nonce in onionbox_open is {}", oob.payload_nonce);
-    println!("I am in onionbox_open");
     let mut buffer = bytes::Bytes([0; bytes::BUFSIZE]);
     for i in 0..PACKET_LENGTH {
         buffer.0[i] = input[i];
