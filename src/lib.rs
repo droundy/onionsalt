@@ -177,12 +177,16 @@ impl OnionBox {
     pub fn packet(&self) -> [u8; PACKET_LENGTH] {
         self.packet
     }
+    /// The response when we get it will begin with these bytes.
+    pub fn return_magic(&self) -> [u8; 32] {
+        *array_ref![self.return_key,0,32]
+    }
     /// This function accepts a packet that has been sent to us, and
     /// decrypts it without authentication if it is the response to
     /// our original message.
     pub fn read_return(&self, payload_key: crypto::KeyPair, msg: &[u8; PACKET_LENGTH])
                        -> Result<[u8; PAYLOAD_LENGTH], crypto::NaClError> {
-        if *array_ref![msg,0,32] != *array_ref![self.return_key,0,32] {
+        if *array_ref![msg,0,32] != self.return_magic() {
             // this doesn't look to be the return packet
             return Err(crypto::NaClError::InvalidInput);
         }
