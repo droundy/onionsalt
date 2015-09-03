@@ -7,6 +7,7 @@ def cargo(cmd):
     print('| cargo', cmd)
     print('''C ~/.cargo
 c ~
+c #
 c .py
 c .tex
 c .log

@@ -128,6 +128,50 @@ pub struct OnionBox {
     payload_recipient_key: crypto::PublicKey,
     payload_nonce: crypto::Nonce,
 }
+
+// The following trait implementations are needed because we cannot
+// derive traits with arrays longer than 32.
+impl std::hash::Hash for OnionBox {
+    fn hash<H: std::hash::Hasher>(&self, h: &mut H) {
+        // For speed, we only bother hashing the payload_nonce, since
+        // it is generated securely and randomly for each OnionBox.
+        // If there is a collision in payload_nonces, we have worse
+        // problems than our hash tables getting messed up!
+        self.payload_nonce.hash(h);
+    }
+}
+impl Clone for OnionBox {
+    fn clone(&self) -> Self {
+        OnionBox {
+            packet: self.packet,
+            return_key: self.return_key,
+            payload_recipient_key: self.payload_recipient_key,
+            payload_nonce: self.payload_nonce,
+        }
+    }
+}
+impl PartialEq for OnionBox {
+    fn eq(&self, o: &OnionBox) -> bool {
+        if self.payload_recipient_key != o.payload_recipient_key
+           || self.payload_nonce != o.payload_nonce {
+            return false;
+        }
+        let mut same = true;
+        for i in 0..PACKET_LENGTH {
+            same = same && self.packet[i] == o.packet[i]
+                && self.return_key[i] == o.return_key[i];
+        }
+        same
+    }
+}
+impl Eq for OnionBox {}
+impl std::fmt::Debug for OnionBox {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "OnionBox{{ recipient: {}, payload_nonce: {} }}",
+               self.payload_recipient_key, self.payload_nonce)
+    }
+}
+
 impl OnionBox {
     /// The encrypted packet, to be sent to the first receiver.
     pub fn packet(&self) -> [u8; PACKET_LENGTH] {
