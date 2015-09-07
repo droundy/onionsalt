@@ -1,3 +1,6 @@
+[![Build Status](https://travis-ci.org/droundy/onionsalt.svg?branch=master)](https://travis-ci.org/droundy/onionsalt)
+[![Coverage Status](https://coveralls.io/repos/droundy/onionsalt/badge.svg?branch=master&service=github)](https://coveralls.io/github/droundy/onionsalt?branch=master)
+
 Onion Salt
 ==========
 
