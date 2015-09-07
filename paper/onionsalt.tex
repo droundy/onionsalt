@@ -241,13 +241,13 @@ encrypt.  This process involves:
 \item Insert the plaintext routing information for the current router.
   If this is the recipient, then also insert the payload, \emph{after}
   encrypting it to them with a user-specified key pair, using the
-  randomly-generated emphemeral public key as a nonce.  The encryption
-  of the payload uses a potentially different key pair (which is only
-  ephemeral if the message is to be anonymous to the recipient), and
-  uses the randomly-generated and ephemeral public key used for
-  routing as the nonce.  This is intended to statistically ensure the
-  uniqueness of the nonce in case the keys used are static, to avoid
-  reusing a nonce.
+  first 24 bytes of the randomly-generated emphemeral public key as a
+  nonce.  The encryption of the payload uses a potentially different
+  key pair (which is only ephemeral if the message is to be anonymous
+  to the recipient), and uses the randomly-generated and ephemeral
+  public key used for routing as the nonce.  This is intended to
+  statistically ensure the uniqueness of the nonce in case the keys
+  used are static, to avoid reusing a nonce.
 \item The message is then encrypted to the recipient of the
   currently-constructed message.  If no mistakes have been made, this
   encryption will result in zeros at the end of the routing
@@ -334,10 +334,11 @@ authenticated to her public key.  Having done so, she constructs her
 response, which is also encrypted and authenticated.  The response is
 encrypted to the same key that encrypted the original payload, but
 with a random nonce, which is included at the beginning of the
-response.  Because the response payload is encrypted and
-indistinguishable from random, we simply overwrite the original
-payload without applying an additional layer of encryption.  For
-simplicity, this encryption is not reflected in the figure.
+response (along with an extra random byte).  Because the response
+payload is encrypted and indistinguishable from random, we simply
+overwrite the original payload without applying an additional layer of
+encryption.  For simplicity, this encryption is not reflected in the
+figure.
 
 The subsequent routers (routers 3, 4, and 5 in our example) are
 unaware that they are relaying a response rather than the original

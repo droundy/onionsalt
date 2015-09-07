@@ -88,7 +88,7 @@ impl SelfDocumenting for Bytes {
         //     print!("{:02x}", self.0[i]);
         // }
         // println!("");
-        crypto::sillybox_afternm(&mut ciphertext, &self.0, auth_length, n, key).unwrap();
+        crypto::sillybox_afternm(&mut ciphertext, &self.0, auth_length, n, key);
         self.0 = ciphertext;
         // print!("Encrypted to: ({})\n    ", auth_length);
         // for i in 0..auth_length {

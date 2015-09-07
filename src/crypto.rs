@@ -52,7 +52,7 @@
 //! // that you should strip the 16 zeros off the beginning!
 //!
 //! crypto::box_up(&mut ciphertext, &padded_plaintext,
-//!                &nonce, &thykey.public, &mykey.secret).unwrap();
+//!                &nonce, &thykey.public, &mykey.secret);
 //!
 //! let mut decrypted: vec::Vec<u8> = vec::Vec::with_capacity(padded_plaintext.len());
 //! for _ in 0..ciphertext.len() { decrypted.push(0); }
@@ -200,8 +200,7 @@ fn core_hsalsa20(n: &[u8; 16], k: &[u8; 32], c: &[u8; 16]) -> [u8; 32] {
 static SIGMA: &'static [u8; 16] = b"expand 32-byte k";
 
 fn stream_salsa20_xor(c: &mut[u8], mut m: &[u8], mut b: u64,
-                      n: &[u8; 8], k: &[u8; 32])
-                      -> Result<(), NaClError> {
+                      n: &[u8; 8], k: &[u8; 32]) {
     assert!(b != 0);
     let mut z: [u8; 16] = [0; 16];
     for i in 0..8 {
@@ -230,12 +229,10 @@ fn stream_salsa20_xor(c: &mut[u8], mut m: &[u8], mut b: u64,
             c[c_offset + i] = if i < m.len() { m[i] ^ x[i] } else { x[i] };
         }
     }
-    Ok(())
 }
 
 
-fn stream_salsa20(c: &mut[u8], d: u64, n: &[u8; 8], k: &[u8; 32])
-                         -> Result<(), NaClError> {
+fn stream_salsa20(c: &mut[u8], d: u64, n: &[u8; 8], k: &[u8; 32]) {
     stream_salsa20_xor(c,&[],d,n,k)
 }
 
@@ -243,16 +240,14 @@ fn stream_salsa20(c: &mut[u8], d: u64, n: &[u8; 8], k: &[u8; 32])
 // always has a fixed length of 32, and returns its output.  We
 // don't need an actual crypto_stream, since it is only used once
 // in tweetnacl.
-fn stream_32(n: &Nonce, k: &[u8; 32])
-             -> Result<[u8; 32], NaClError> {
+fn stream_32(n: &Nonce, k: &[u8; 32]) -> [u8;32] {
     let s = core_hsalsa20(array_ref![n.0, 0, 16], k, SIGMA);
     let mut c: [u8; 32] = [0; 32];
-    try!(stream_salsa20(&mut c,32,array_ref![n.0, 16, 8],&s));
-    Ok(c)
+    stream_salsa20(&mut c,32,array_ref![n.0, 16, 8],&s);
+    c
 }
 
-fn stream_xor(c: &mut[u8], m: &[u8], d: u64, n: &Nonce, k: &[u8; 32])
-                         -> Result<(), NaClError> {
+fn stream_xor(c: &mut[u8], m: &[u8], d: u64, n: &Nonce, k: &[u8; 32]) {
     let s = core_hsalsa20(array_ref![n.0, 0, 16], k, SIGMA);
     stream_salsa20_xor(c,m,d,array_ref![n.0, 16, 8],&s)
 }
@@ -292,7 +287,6 @@ use std;
 #[derive(Debug)]
 pub enum NaClError {
     AuthFailed,
-    InvalidInput,
     WrongKey,
     IOError(std::io::Error),
     RecvError(std::sync::mpsc::RecvError),
@@ -358,8 +352,7 @@ impl Display for Nonce {
 }
 
 
-fn onetimeauth(mut m: &[u8], k: &[u8])
-               -> Result<[u8; 16], NaClError> {
+fn onetimeauth(mut m: &[u8], k: &[u8]) -> [u8; 16] {
     let mut n = m.len();
 
     let x: &mut[u32; 17] = &mut [0; 17];
@@ -435,27 +428,22 @@ fn onetimeauth(mut m: &[u8], k: &[u8])
     for j in 0..16 {
         out[j] = h[j] as u8;
     }
-    Ok(out)
+    out
 }
 
 fn onetimeauth_verify(h: &[u8; 16], m: &[u8], k: &[u8])
                       -> Result<(), NaClError> {
-    let x = try!(onetimeauth(m, k));
+    let x = onetimeauth(m, k);
     verify_16(h,&x)
 }
 
 /// Use symmetric encryption to encrypt a message.
-pub fn secretbox(c: &mut[u8], m: &[u8], n: &Nonce, k: &[u8; 32])
-                        -> Result<(), NaClError> {
+pub fn secretbox(c: &mut[u8], m: &[u8], n: &Nonce, k: &[u8; 32]) {
     let d = c.len() as u64;
-    if d != m.len() as u64 {
-        return Err(NaClError::InvalidInput);
-    }
-    if d < 32 {
-        return Err(NaClError::InvalidInput);
-    }
-    try!(stream_xor(c,m,d,n,k));
-    let h = try!(onetimeauth(&c[32..], c));
+    assert_eq!(d, m.len() as u64);
+    assert!(d >= 32);
+    stream_xor(c,m,d,n,k);
+    let h = onetimeauth(&c[32..], c);
     for i in 0..16 {
         c[i] = 0;
     }
@@ -466,22 +454,17 @@ pub fn secretbox(c: &mut[u8], m: &[u8], n: &Nonce, k: &[u8; 32])
     for i in 0..16 {
         c[16+i] = h[i];
     }
-    Ok(())
 }
 
 /// Decrypt a message encrypted with `secretbox`.
 pub fn secretbox_open(m: &mut[u8], c: &[u8], n: &Nonce, k: &[u8; 32])
                              -> Result<(), NaClError> {
     let d = c.len() as u64;
-    if m.len() as u64 != d {
-        return Err(NaClError::InvalidInput);
-    }
-    if d < 32 {
-        return Err(NaClError::InvalidInput);
-    }
-    let x = try!(stream_32(n,k));
+    assert_eq!(m.len() as u64, d);
+    assert!(d >= 32);
+    let x = stream_32(n,k);
     try!(onetimeauth_verify(array_ref!(c, 16, 16), &c[32..], &x));
-    try!(stream_xor(m,c,d,n,k));
+    stream_xor(m,c,d,n,k);
     for i in 0..32 {
         m[i] = 0;
     }
@@ -499,7 +482,7 @@ fn secretbox_works() {
         ciphertext.push(0);
     }
     let nonce = Nonce([0; 24]);
-    secretbox(&mut ciphertext, plaintext, &nonce, secretkey).unwrap();
+    secretbox(&mut ciphertext, plaintext, &nonce, secretkey);
     // There has got to be a better way to allocate an array of
     // zeros with dynamically determined type.
     let mut decrypted: vec::Vec<u8> = vec::Vec::with_capacity(plaintext.len());
@@ -514,14 +497,13 @@ fn secretbox_works() {
 
 /// Use symmetric encryption to encrypt a message, with only the first
 /// `nauth` bytes plaintext authenticated.
-fn funnybox(c: &mut[u8], m: &[u8], nauth: usize, n: &Nonce, k: &[u8; 32])
-                -> Result<(), NaClError> {
+fn funnybox(c: &mut[u8], m: &[u8], nauth: usize, n: &Nonce, k: &[u8; 32]) {
     let d = c.len() as u64;
-    if d != m.len() as u64 || nauth > d as usize -32 || d < 32 {
-        return Err(NaClError::InvalidInput);
-    }
-    try!(stream_xor(c,m,d,n,k));
-    let h = try!(onetimeauth(&c[32..32+nauth], c));
+    assert_eq!(d, m.len() as u64);
+    assert!(nauth <= d as usize-32);
+    assert!(d >= 32);
+    stream_xor(c,m,d,n,k);
+    let h = onetimeauth(&c[32..32+nauth], c);
     for i in 0..16 {
         c[i] = 0;
     }
@@ -532,7 +514,6 @@ fn funnybox(c: &mut[u8], m: &[u8], nauth: usize, n: &Nonce, k: &[u8; 32])
     for i in 0..16 {
         c[16+i] = h[i];
     }
-    Ok(())
 }
 
 /// Decrypt a message encrypted with `funnybox`, only authenticating
@@ -540,12 +521,12 @@ fn funnybox(c: &mut[u8], m: &[u8], nauth: usize, n: &Nonce, k: &[u8; 32])
 pub fn funnybox_open(m: &mut[u8], c: &[u8], nauth: usize, n: &Nonce, k: &[u8; 32])
                              -> Result<(), NaClError> {
     let d = c.len() as u64;
-    if m.len() as u64 != d || nauth > d as usize - 32 || d < 32 {
-        return Err(NaClError::InvalidInput);
-    }
-    let x = try!(stream_32(n,k));
+    assert_eq!(m.len() as u64, d);
+    assert!(nauth <= d as usize - 32);
+    assert!(d >= 32);
+    let x = stream_32(n,k);
     try!(onetimeauth_verify(array_ref!(c, 16, 16), &c[32..32+nauth], &x));
-    try!(stream_xor(m,c,d,n,k));
+    stream_xor(m,c,d,n,k);
     for i in 0..32 {
         m[i] = 0;
     }
@@ -564,7 +545,7 @@ fn funnybox_works() {
         ciphertext.push(0);
     }
     let nonce = Nonce([0; 24]);
-    funnybox(&mut ciphertext, plaintext, nauth, &nonce, secretkey).unwrap();
+    funnybox(&mut ciphertext, plaintext, nauth, &nonce, secretkey);
     // There has got to be a better way to allocate an array of
     // zeros with dynamically determined type.
     let mut decrypted: vec::Vec<u8> = vec::Vec::with_capacity(plaintext.len());
@@ -803,29 +784,25 @@ pub fn random_nonce() -> Result<Nonce, NaClError> {
 /// This is useful if you want to handle many messages between the
 /// same two recipients, since it allows you to do the public-key
 /// business just once.
-pub fn box_beforenm(pk: &PublicKey, sk: &SecretKey)
-                    -> Result<[u8; 32], NaClError> {
+pub fn box_beforenm(pk: &PublicKey, sk: &SecretKey) -> [u8; 32] {
     let mut s: [u8; 32] = [0; 32];
     scalarmult(&mut s,&sk.0,&pk.0);
-    Ok(core_hsalsa20(array_ref![_0, 0, 16],&s,SIGMA))
+    core_hsalsa20(array_ref![_0, 0, 16],&s,SIGMA)
 }
 
 /// Encrypt a message after creating a secret key using
 /// `box_beforenm`.  The two functions together come out to the
 /// same thing as `box_up`.
-pub fn box_afternm(c: &mut[u8], m: &[u8], n: &Nonce, k: &[u8; 32])
-                   -> Result<(), NaClError> {
+pub fn box_afternm(c: &mut[u8], m: &[u8], n: &Nonce, k: &[u8; 32]) {
     secretbox(c, m, n, k)
 }
 
 /// An implementation of the NaCl function `crypto_box`, renamed
 /// to `crypto::box_up` because `box` is a keyword in rust.
 pub fn box_up(c: &mut[u8], m: &[u8],
-              n: &Nonce, pk: &PublicKey, sk: &SecretKey)
-              -> Result<(), NaClError> {
-    let k = try!(box_beforenm(pk,sk));
-    try!(box_afternm(c, m, n, &k));
-    Ok(())
+              n: &Nonce, pk: &PublicKey, sk: &SecretKey) {
+    let k = box_beforenm(pk,sk);
+    box_afternm(c, m, n, &k);
 }
 
 /// Decrypt a message using a key that was precomputed using
@@ -841,7 +818,7 @@ pub fn box_open_afternm(m: &mut[u8], c: &[u8], n: &Nonce, k: &[u8; 32])
 pub fn box_open(m: &mut[u8], c: &[u8],
                 n: &Nonce, pk: &PublicKey, sk: &SecretKey)
                 -> Result<(), NaClError> {
-    let k = try!(box_beforenm(pk,sk));
+    let k = box_beforenm(pk,sk);
     box_open_afternm(m, c, n, &k)
 }
 
@@ -857,7 +834,7 @@ fn box_works() {
         ciphertext.push(0);
     }
     let nonce = Nonce([0; 24]);
-    box_up(&mut ciphertext, plaintext, &nonce, &k1.public, &k2.secret).unwrap();
+    box_up(&mut ciphertext, plaintext, &nonce, &k1.public, &k2.secret);
     // There has got to be a better way to allocate an array of
     // zeros with dynamically determined type.
     let mut decrypted: vec::Vec<u8> = vec::Vec::with_capacity(plaintext.len());
@@ -874,11 +851,10 @@ fn box_works() {
 /// This is useful if you want to handle many messages between the
 /// same two recipients, since it allows you to do the public-key
 /// business just once.
-pub fn sillybox_beforenm(pk: &PublicKey, sk: &SecretKey)
-                         -> Result<[u8; 32], NaClError> {
+pub fn sillybox_beforenm(pk: &PublicKey, sk: &SecretKey) -> [u8;32] {
     let mut s: [u8; 32] = [0; 32];
     scalarmult(&mut s,&sk.0,&pk.0);
-    Ok(core_hsalsa20(array_ref![_0,0,16],&s,SIGMA))
+    core_hsalsa20(array_ref![_0,0,16],&s,SIGMA)
 }
 
 /// Encrypt a message after creating a secret key using
@@ -886,8 +862,7 @@ pub fn sillybox_beforenm(pk: &PublicKey, sk: &SecretKey)
 /// same thing as `sillybox`, which you should read to find out how it
 /// differs from the standard NaCl `box` encryption.
 pub fn sillybox_afternm(c: &mut[u8], m: &[u8], nauth: usize,
-                        n: &Nonce, k: &[u8; 32])
-                   -> Result<(), NaClError> {
+                        n: &Nonce, k: &[u8; 32]) {
     funnybox(c, m, nauth, n, k)
 }
 
@@ -900,9 +875,8 @@ pub fn sillybox_afternm(c: &mut[u8], m: &[u8], nauth: usize,
 /// information leaks triggered by maliciously modified packets), but
 /// information may be added to the communication en-route.
 pub fn sillybox(c: &mut[u8], m: &[u8], nauth: usize,
-                n: &Nonce, pk: &PublicKey, sk: &SecretKey)
-                -> Result<(), NaClError> {
-    let k = try!(sillybox_beforenm(pk,sk));
+                n: &Nonce, pk: &PublicKey, sk: &SecretKey) {
+    let k = sillybox_beforenm(pk,sk);
     sillybox_afternm(c, m, nauth, &n, &k)
 }
 
@@ -924,7 +898,7 @@ pub fn sillybox_open_afternm(m: &mut[u8], c: &[u8], nauth: usize,
 pub fn sillybox_open(m: &mut[u8], c: &[u8], nauth: usize,
                      n: &Nonce, pk: &PublicKey, sk: &SecretKey)
                      -> Result<(), NaClError> {
-    let k = try!(sillybox_beforenm(pk,sk));
+    let k = sillybox_beforenm(pk,sk);
     sillybox_open_afternm(m, c, nauth, n, &k)
 }
 
@@ -941,7 +915,7 @@ fn sillybox_works() {
         ciphertext.push(0);
     }
     let nonce = Nonce([0; 24]);
-    sillybox(&mut ciphertext, plaintext, nauth, &nonce, &k1.public, &k2.secret).unwrap();
+    sillybox(&mut ciphertext, plaintext, nauth, &nonce, &k1.public, &k2.secret);
     // There has got to be a better way to allocate an array of
     // zeros with dynamically determined type.
     let mut decrypted: vec::Vec<u8> = vec::Vec::with_capacity(plaintext.len());
@@ -983,8 +957,8 @@ fn sillybox_afternm_works() {
         ciphertext.push(0);
     }
     let nonce = Nonce([0; 24]);
-    let sk = sillybox_beforenm(&k1.public, &k2.secret).unwrap();
-    sillybox_afternm(&mut ciphertext, plaintext, nauth, &nonce, &sk).unwrap();
+    let sk = sillybox_beforenm(&k1.public, &k2.secret);
+    sillybox_afternm(&mut ciphertext, plaintext, nauth, &nonce, &sk);
     // There has got to be a better way to allocate an array of
     // zeros with dynamically determined type.
     let mut decrypted: vec::Vec<u8> = vec::Vec::with_capacity(plaintext.len());
@@ -1276,7 +1250,7 @@ fn funnybox_unfunnybox_auth() {
         let mut padded_data = vec![0;32];
         padded_data.extend(data.clone());
         let mut ciphertext = vec![0;padded_data.len()];
-        funnybox(&mut ciphertext, &padded_data, authlen, &n, &k.0).unwrap();
+        funnybox(&mut ciphertext, &padded_data, authlen, &n, &k.0);
         for i in 0..padded_data.len() {
             padded_data[i] = 0; // no cheating!
         }
@@ -1301,7 +1275,7 @@ fn funnybox_unfunnybox_works() {
         let mut padded_data = vec![0;32];
         padded_data.extend(data.clone());
         let mut ciphertext = vec![0;padded_data.len()];
-        funnybox(&mut ciphertext, &padded_data, authlen, &n, &k.0).unwrap();
+        funnybox(&mut ciphertext, &padded_data, authlen, &n, &k.0);
         for i in 0..padded_data.len() {
             padded_data[i] = 0; // no cheating!
         }
@@ -1330,7 +1304,7 @@ fn secretbox_unsecretbox() {
         let mut padded_data = vec![0;32];
         padded_data.extend(data.clone());
         let mut ciphertext = vec![0;padded_data.len()];
-        secretbox(&mut ciphertext, &padded_data, &n, &k.0).unwrap();
+        secretbox(&mut ciphertext, &padded_data, &n, &k.0);
         for i in 0..padded_data.len() {
             padded_data[i] = 0; // no cheating!
         }
@@ -1351,7 +1325,7 @@ fn secretbox_unsecretbox_auth() {
         let mut padded_data = vec![0;32];
         padded_data.extend(data.clone());
         let mut ciphertext = vec![0;padded_data.len()];
-        secretbox(&mut ciphertext, &padded_data, &n, &k.0).unwrap();
+        secretbox(&mut ciphertext, &padded_data, &n, &k.0);
         for i in 0..padded_data.len() {
             padded_data[i] = 0; // no cheating!
         }
@@ -1368,7 +1342,7 @@ fn box_unbox() {
         let mut padded_data = vec![0;32];
         padded_data.extend(data.clone());
         let mut ciphertext = vec![0;padded_data.len()];
-        box_up(&mut ciphertext, &padded_data, &n, &k1.public, &k2.secret).unwrap();
+        box_up(&mut ciphertext, &padded_data, &n, &k1.public, &k2.secret);
         for i in 0..padded_data.len() {
             padded_data[i] = 0; // no cheating!
         }

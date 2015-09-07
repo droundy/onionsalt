@@ -188,7 +188,7 @@ impl OnionBox {
                        -> Result<[u8; PAYLOAD_LENGTH], crypto::NaClError> {
         if *array_ref![msg,0,32] != self.return_magic() {
             // this doesn't look to be the return packet
-            return Err(crypto::NaClError::InvalidInput);
+            return Err(crypto::NaClError::AuthFailed);
         }
         let mut encrypted = *array_ref![msg, PACKET_LENGTH - ENCRYPTEDPAYLOAD_LENGTH,
                                         ENCRYPTEDPAYLOAD_LENGTH];
@@ -216,7 +216,7 @@ impl OnionBox {
         // FIXME fill up plain here with the actual content to send.
         let mut cipher = [0; ENCRYPTEDPAYLOAD_LENGTH];
         crypto::box_up(&mut cipher[16..], &plain, &self.payload_nonce,
-                       &self.payload_recipient_key, &payload_key.secret).unwrap();
+                       &self.payload_recipient_key, &payload_key.secret);
         *array_mut_ref![cipher, 0, 32] = payload_key.public.0;
         for i in 0..ENCRYPTEDPAYLOAD_LENGTH {
             self.packet[PACKET_LENGTH - ENCRYPTEDPAYLOAD_LENGTH + i] ^= cipher[i];
@@ -270,7 +270,7 @@ impl OpenedOnionBox {
         let rand_data = crypto::random_32().unwrap();
         let response_nonce = crypto::Nonce(*array_ref![rand_data,0,24]);
         crypto::box_up(&mut ci[16..], &pl, &response_nonce, &self.key(),
-                       &response_key.secret).unwrap();
+                       &response_key.secret);
         *array_mut_ref![ci, 0, 32] = rand_data;
         onionbox_insert_response_algorithm(&mut buffer, &ci);
         for i in 0..PACKET_LENGTH {
@@ -367,9 +367,8 @@ fn onionbox_algorithm<T: bytes::SelfDocumenting>(buffer: &mut T,
                                                  payload_recipient: usize)
                                                  -> Result<crypto::Nonce, crypto::NaClError> {
     let route_count = keys_and_routings.len();
-    if payload_recipient >= route_count || route_count > ROUTE_COUNT {
-        return Err(crypto::NaClError::InvalidInput);
-    }
+    assert!(payload_recipient < route_count);
+    assert!(route_count <= ROUTE_COUNT);
 
     assert_eq!(PACKET_LENGTH, bytes::PACKET_LENGTH);
     assert_eq!(PACKET_LENGTH, ROUTE_COUNT*ROUTING_OVERHEAD + ENCRYPTEDPAYLOAD_LENGTH);
@@ -387,8 +386,8 @@ fn onionbox_algorithm<T: bytes::SelfDocumenting>(buffer: &mut T,
     }
     let mut skeys: [[u8; 32]; ROUTE_COUNT] = [[0;32]; ROUTE_COUNT];
     for i in 0..route_count {
-        skeys[i] = try!(crypto::sillybox_beforenm(&keys_and_routings[i].0,
-                                                  &my_keypairs[i].secret));
+        skeys[i] = crypto::sillybox_beforenm(&keys_and_routings[i].0,
+                                             &my_keypairs[i].secret);
     }
 
     // First let's grab the ciphertext to decrypt the return message...
@@ -507,7 +506,7 @@ fn onionbox_open_algorithm<T: bytes::SelfDocumenting>(buffer: &mut T,
                      "0");
     buffer.annotate(&format!("Extract the public key and insert zeros"));
 
-    let skey = try!(crypto::sillybox_beforenm(&pk, secret_key));
+    let skey = crypto::sillybox_beforenm(&pk, secret_key);
     try!(buffer.sillybox_open_afternm(AUTH_LENGTH, &crypto::Nonce([0;24]), &skey));
     buffer.annotate(&format!("Decrypting with our secret key"));
     let routevec = buffer.get_bytes(32, ROUTING_LENGTH);
