@@ -411,7 +411,7 @@ fn onionbox_algorithm<T: bytes::SelfDocumenting>(buffer: &mut T,
     } else {
         // For a short onion, we need to start with random data
         let nonce = try!(crypto::random_nonce());
-        let skey = try!(crypto::random_nonce()).0;
+        let skey = try!(crypto::box_keypair()).secret.0;
         buffer.sillybox_afternm(AUTH_LENGTH, &nonce, &skey, &format!("Random"));
         buffer.set_bytes(0,32, &[0;32], "0");
         buffer.set_bytes(bytes::BUFSIZE - ENCRYPTEDPAYLOAD_LENGTH - ROUTING_OVERHEAD,
@@ -490,7 +490,10 @@ fn onionbox_open_algorithm<T: bytes::SelfDocumenting>(buffer: &mut T,
                                                       -> Result<[u8; ROUTING_LENGTH],
                                                                 crypto::NaClError>
 {
-    let pk: &[u8] = &buffer.get_bytes(0, 32);
+    let pk = {
+        let pkbytes = buffer.get_bytes(0, 32);
+        crypto::PublicKey(*array_ref![pkbytes,0,32])
+    };
     buffer.move_bytes(ROUTE_COUNT*ROUTING_OVERHEAD,
                       bytes::BUFSIZE-ENCRYPTEDPAYLOAD_LENGTH,
                       ENCRYPTEDPAYLOAD_LENGTH);
@@ -503,7 +506,7 @@ fn onionbox_open_algorithm<T: bytes::SelfDocumenting>(buffer: &mut T,
                      "0");
     buffer.annotate(&format!("Extract the public key and insert zeros"));
 
-    let skey = try!(crypto::sillybox_beforenm(pk, secret_key));
+    let skey = try!(crypto::sillybox_beforenm(&pk, secret_key));
     try!(buffer.sillybox_open_afternm(AUTH_LENGTH, &crypto::Nonce([0;32]), &skey));
     buffer.annotate(&format!("Decrypting with our secret key"));
     let routevec = buffer.get_bytes(32, ROUTING_LENGTH);

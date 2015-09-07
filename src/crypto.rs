@@ -318,11 +318,6 @@ impl<'a> std::convert::From<&'a str> for NaClError {
 /// A public key.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct PublicKey(pub [u8; 32]);
-impl PublicKey {
-    pub fn new<T: ToPublicKey>(x: &T) -> Result<PublicKey, NaClError> {
-        return x.to_public_key()
-    }
-}
 impl Display for PublicKey {
     fn fmt(&self, f: &mut Formatter) -> Result<(), Error> {
         let mut s = String::new();
@@ -338,80 +333,12 @@ impl Display for PublicKey {
     }
 }
 
-/// A trait that is defined for types that can be used as a public
-/// key.  Specifically, [u8; 32], &[u8] (with possible crash on the
-/// wrong length) and PublicKey all implement this trait.
-pub trait ToPublicKey {
-    fn to_public_key(&self) -> Result<PublicKey, NaClError>;
-}
-impl ToPublicKey for PublicKey {
-    fn to_public_key(&self) -> Result<PublicKey, NaClError> {
-        Ok(self.clone())
-    }
-}
-impl ToPublicKey for [u8; 32] {
-    fn to_public_key(&self) -> Result<PublicKey, NaClError> {
-        Ok(PublicKey(*self))
-    }
-}
-impl<'a> ToPublicKey for &'a [u8] {
-    fn to_public_key(&self) -> Result<PublicKey, NaClError> {
-        if self.len() < 32 {
-            return Err(NaClError::InvalidInput);
-        }
-        let mut k = [0; 32];
-        for i in 0..32 {
-            k[i] = self[i];
-        }
-        Ok(PublicKey(k))
-    }
-}
-impl ToPublicKey for [u8] {
-    fn to_public_key(&self) -> Result<PublicKey, NaClError> {
-        if self.len() < 32 {
-            return Err(NaClError::InvalidInput);
-        }
-        let mut k = [0; 32];
-        for i in 0..32 {
-            k[i] = self[i];
-        }
-        Ok(PublicKey(k))
-    }
-}
-
 /// A secret key.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct SecretKey(pub [u8; 32]);
-impl SecretKey {
-    pub fn new<T: ToSecretKey>(x: &T) -> Result<SecretKey, NaClError> {
-        return x.to_secret_key()
-    }
-}
 impl Display for SecretKey {
     fn fmt(&self, f: &mut Formatter) -> Result<(), Error> {
         PublicKey(self.0).fmt(f)
-    }
-}
-
-/// A trait that is defined for types that can be used as a secret
-/// key.  Specifically, [u8; 32], &[u8] (with possible crash on the
-/// wrong length) and SecretKey all implement this trait.
-pub trait ToSecretKey {
-    fn to_secret_key(&self) -> Result<SecretKey, NaClError>;
-}
-impl ToSecretKey for SecretKey {
-    fn to_secret_key(&self) -> Result<SecretKey, NaClError> {
-        Ok(self.clone())
-    }
-}
-impl ToSecretKey for [u8; 32] {
-    fn to_secret_key(&self) -> Result<SecretKey, NaClError> {
-        Ok(SecretKey(*self))
-    }
-}
-impl<'a> ToSecretKey for &'a [u8] {
-    fn to_secret_key(&self) -> Result<SecretKey, NaClError> {
-        Ok(SecretKey(try!(self.to_public_key()).0))
     }
 }
 
@@ -425,27 +352,6 @@ impl Display for Nonce {
     }
 }
 
-/// A trait that is defined for types that can be used as a nonce.
-/// Specifically, [u8; 32], &[u8] (with possible crash on the wrong
-/// length) and Nonce all implement this trait.
-pub trait ToNonce {
-    fn to_nonce(&self) -> Result<Nonce, NaClError>;
-}
-impl ToNonce for Nonce {
-    fn to_nonce(&self) -> Result<Nonce, NaClError> {
-        Ok(self.clone())
-    }
-}
-impl ToNonce for [u8; 32] {
-    fn to_nonce(&self) -> Result<Nonce, NaClError> {
-        Ok(Nonce(*self))
-    }
-}
-impl<'a> ToNonce for &'a [u8] {
-    fn to_nonce(&self) -> Result<Nonce, NaClError> {
-        Ok(Nonce(try!(self.to_public_key()).0))
-    }
-}
 
 fn onetimeauth(mut m: &[u8], k: &[u8])
                -> Result<[u8; 16], NaClError> {
@@ -884,13 +790,10 @@ pub fn random_nonce() -> Result<Nonce, NaClError> {
 /// This is useful if you want to handle many messages between the
 /// same two recipients, since it allows you to do the public-key
 /// business just once.
-pub fn box_beforenm<PK: ToPublicKey + ?Sized,
-                    SK: ToSecretKey + ?Sized>(pk: &PK, sk: &SK)
-                                              -> Result<[u8; 32], NaClError> {
-    let x = try!(sk.to_secret_key());
-    let y = try!(pk.to_public_key());
+pub fn box_beforenm(pk: &PublicKey, sk: &SecretKey)
+                    -> Result<[u8; 32], NaClError> {
     let mut s: [u8; 32] = [0; 32];
-    scalarmult(&mut s,&x.0,&y.0);
+    scalarmult(&mut s,&sk.0,&pk.0);
     Ok(core_hsalsa20(array_ref![_0, 0, 16],&s,SIGMA))
 }
 
@@ -904,13 +807,11 @@ pub fn box_afternm(c: &mut[u8], m: &[u8], n: &Nonce, k: &[u8; 32])
 
 /// An implementation of the NaCl function `crypto_box`, renamed
 /// to `crypto::box_up` because `box` is a keyword in rust.
-pub fn box_up<N: ToNonce,
-              PK: ToPublicKey,
-              SK: ToSecretKey>(c: &mut[u8], m: &[u8],
-                               n: &N, pk: &PK, sk: &SK)
-                               -> Result<(), NaClError> {
+pub fn box_up(c: &mut[u8], m: &[u8],
+              n: &Nonce, pk: &PublicKey, sk: &SecretKey)
+              -> Result<(), NaClError> {
     let k = try!(box_beforenm(pk,sk));
-    try!(box_afternm(c, m, &try!(n.to_nonce()), &k));
+    try!(box_afternm(c, m, n, &k));
     Ok(())
 }
 
@@ -924,13 +825,11 @@ pub fn box_open_afternm(m: &mut[u8], c: &[u8], n: &Nonce, k: &[u8; 32])
 
 /// Open a message encrypted with `crypto::box_up`.
 ///
-pub fn box_open<N: ToNonce,
-                PK: ToPublicKey,
-                SK: ToSecretKey>(m: &mut[u8], c: &[u8],
-                                 n: &N, pk: &PK, sk: &SK)
-                                 -> Result<(), NaClError> {
+pub fn box_open(m: &mut[u8], c: &[u8],
+                n: &Nonce, pk: &PublicKey, sk: &SecretKey)
+                -> Result<(), NaClError> {
     let k = try!(box_beforenm(pk,sk));
-    box_open_afternm(m, c, &try!(n.to_nonce()), &k)
+    box_open_afternm(m, c, n, &k)
 }
 
 #[test]
@@ -962,13 +861,10 @@ fn box_works() {
 /// This is useful if you want to handle many messages between the
 /// same two recipients, since it allows you to do the public-key
 /// business just once.
-pub fn sillybox_beforenm<PK: ToPublicKey + ?Sized,
-                         SK: ToSecretKey + ?Sized>(pk: &PK, sk: &SK)
-                                                   -> Result<[u8; 32], NaClError> {
-    let x = try!(sk.to_secret_key());
-    let y = try!(pk.to_public_key());
+pub fn sillybox_beforenm(pk: &PublicKey, sk: &SecretKey)
+                         -> Result<[u8; 32], NaClError> {
     let mut s: [u8; 32] = [0; 32];
-    scalarmult(&mut s,&x.0,&y.0);
+    scalarmult(&mut s,&sk.0,&pk.0);
     Ok(core_hsalsa20(array_ref![_0,0,16],&s,SIGMA))
 }
 
@@ -990,13 +886,11 @@ pub fn sillybox_afternm(c: &mut[u8], m: &[u8], nauth: usize,
 /// routing in which all the routing information is authenticated (to
 /// information leaks triggered by maliciously modified packets), but
 /// information may be added to the communication en-route.
-pub fn sillybox<N: ToNonce,
-                PK: ToPublicKey,
-                SK: ToSecretKey>(c: &mut[u8], m: &[u8], nauth: usize,
-                                 n: &N, pk: &PK, sk: &SK)
-                                 -> Result<(), NaClError> {
+pub fn sillybox(c: &mut[u8], m: &[u8], nauth: usize,
+                n: &Nonce, pk: &PublicKey, sk: &SecretKey)
+                -> Result<(), NaClError> {
     let k = try!(sillybox_beforenm(pk,sk));
-    sillybox_afternm(c, m, nauth, &try!(n.to_nonce()), &k)
+    sillybox_afternm(c, m, nauth, &n, &k)
 }
 
 /// Decrypt a message using a key that was precomputed using
@@ -1014,13 +908,11 @@ pub fn sillybox_open_afternm(m: &mut[u8], c: &[u8], nauth: usize,
 /// approach would be to nest in the remaining bytes an encrypted and
 /// authenticated message.
 ///
-pub fn sillybox_open<N: ToNonce,
-                     PK: ToPublicKey,
-                     SK: ToSecretKey>(m: &mut[u8], c: &[u8], nauth: usize,
-                                      n: &N, pk: &PK, sk: &SK)
-                                      -> Result<(), NaClError> {
+pub fn sillybox_open(m: &mut[u8], c: &[u8], nauth: usize,
+                     n: &Nonce, pk: &PublicKey, sk: &SecretKey)
+                     -> Result<(), NaClError> {
     let k = try!(sillybox_beforenm(pk,sk));
-    sillybox_open_afternm(m, c, nauth, &try!(n.to_nonce()), &k)
+    sillybox_open_afternm(m, c, nauth, n, &k)
 }
 
 #[test]
