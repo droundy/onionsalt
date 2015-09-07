@@ -1,6 +1,8 @@
 Onion Salt
 ==========
 
+[Documentation](https://droundy.github.io/arrayref)
+
 The onion salt source code is an encryption protocol that generates
 nested "onions" which can be used in an onion-like routing protocol.
 For more information, see the paper in the paper subdirectory.
