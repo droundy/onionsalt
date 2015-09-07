@@ -198,7 +198,7 @@ impl OnionBox {
             encrypted[i] ^= simple_key[i];
         }
         let semidecrypted = &mut encrypted;
-        let response_nonce = crypto::Nonce(*array_ref![semidecrypted,0,32]);
+        let response_nonce = crypto::Nonce(*array_ref![semidecrypted,0,24]);
         let payload = array_mut_ref![semidecrypted, 16, PAYLOAD_LENGTH+32];
         *array_mut_ref![payload,0,16] = [0;16];
         let mut plain = [0; PAYLOAD_LENGTH+32];
@@ -267,10 +267,11 @@ impl OpenedOnionBox {
         let mut pl = [0; PAYLOAD_LENGTH+32];
         let mut ci = [0; ENCRYPTEDPAYLOAD_LENGTH];
         *array_mut_ref![pl,32,PAYLOAD_LENGTH] = *response;
-        let response_nonce = crypto::random_nonce().unwrap();
+        let rand_data = crypto::random_32().unwrap();
+        let response_nonce = crypto::Nonce(*array_ref![rand_data,0,24]);
         crypto::box_up(&mut ci[16..], &pl, &response_nonce, &self.key(),
                        &response_key.secret).unwrap();
-        *array_mut_ref![ci, 0, 32] = response_nonce.0;
+        *array_mut_ref![ci, 0, 32] = rand_data;
         onionbox_insert_response_algorithm(&mut buffer, &ci);
         for i in 0..PACKET_LENGTH {
             self.packet[i] = buffer.0[i];
@@ -321,7 +322,7 @@ pub fn onionbox(keys_and_routings: &[(crypto::PublicKey,
         packet: [0; PACKET_LENGTH],
         return_key: [0; PACKET_LENGTH],
         payload_recipient_key: keys_and_routings[payload_recipient].0,
-        payload_nonce: crypto::Nonce([0;32]),
+        payload_nonce: crypto::Nonce([0;24]),
     };
     let mut buffer = bytes::Bytes([0; bytes::BUFSIZE]);
     let mut return_key = bytes::Bytes([0; bytes::BUFSIZE]);
@@ -342,7 +343,7 @@ pub fn onionbox_open(input: &[u8; PACKET_LENGTH],
     let mut oob = OpenedOnionBox {
         packet: [0; PACKET_LENGTH],
         routing: [0; ROUTING_LENGTH],
-        payload_nonce: crypto::Nonce(*array_ref![input, 0, 32]),
+        payload_nonce: crypto::Nonce(*array_ref![input, 0, 24]),
     };
     let mut buffer = bytes::Bytes([0; bytes::BUFSIZE]);
     for i in 0..PACKET_LENGTH {
@@ -375,7 +376,7 @@ fn onionbox_algorithm<T: bytes::SelfDocumenting>(buffer: &mut T,
     assert_eq!(16 + (ROUTE_COUNT+1)*ROUTING_OVERHEAD - 32 + ENCRYPTEDPAYLOAD_LENGTH,
                bytes::BUFSIZE);
     // We always use a zero nonce.
-    let nonce = crypto::Nonce([0; 32]);
+    let nonce = crypto::Nonce([0; 24]);
 
     // Here we create buffers for my_public_keys, my_private_keys, and
     // our plaintext.
@@ -480,7 +481,7 @@ fn onionbox_algorithm<T: bytes::SelfDocumenting>(buffer: &mut T,
     buffer.annotate(&format!("Putting packet into place"));
     buffer.set_bytes(0, 32, &my_keypairs[0].public.0, "P0");
     buffer.annotate(&format!("Adding the last public key"));
-    Ok(crypto::Nonce(my_keypairs[payload_recipient].public.0))
+    Ok(crypto::Nonce(*array_ref![my_keypairs[payload_recipient].public.0,0,24]))
 }
 
 /// **Not for public consumption!** The buffer already contains the
@@ -507,7 +508,7 @@ fn onionbox_open_algorithm<T: bytes::SelfDocumenting>(buffer: &mut T,
     buffer.annotate(&format!("Extract the public key and insert zeros"));
 
     let skey = try!(crypto::sillybox_beforenm(&pk, secret_key));
-    try!(buffer.sillybox_open_afternm(AUTH_LENGTH, &crypto::Nonce([0;32]), &skey));
+    try!(buffer.sillybox_open_afternm(AUTH_LENGTH, &crypto::Nonce([0;24]), &skey));
     buffer.annotate(&format!("Decrypting with our secret key"));
     let routevec = buffer.get_bytes(32, ROUTING_LENGTH);
     buffer.move_bytes(32+ROUTING_LENGTH,

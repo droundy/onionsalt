@@ -200,11 +200,9 @@ fn core_hsalsa20(n: &[u8; 16], k: &[u8; 32], c: &[u8; 16]) -> [u8; 32] {
 static SIGMA: &'static [u8; 16] = b"expand 32-byte k";
 
 fn stream_salsa20_xor(c: &mut[u8], mut m: &[u8], mut b: u64,
-                      n: &[u8; 16], k: &[u8; 32])
+                      n: &[u8; 8], k: &[u8; 32])
                       -> Result<(), NaClError> {
-    if b == 0 {
-        return Err(NaClError::InvalidInput);
-    }
+    assert!(b != 0);
     let mut z: [u8; 16] = [0; 16];
     for i in 0..8 {
         z[i] = n[i];
@@ -236,7 +234,7 @@ fn stream_salsa20_xor(c: &mut[u8], mut m: &[u8], mut b: u64,
 }
 
 
-fn stream_salsa20(c: &mut[u8], d: u64, n: &[u8; 16], k: &[u8; 32])
+fn stream_salsa20(c: &mut[u8], d: u64, n: &[u8; 8], k: &[u8; 32])
                          -> Result<(), NaClError> {
     stream_salsa20_xor(c,&[],d,n,k)
 }
@@ -249,14 +247,14 @@ fn stream_32(n: &Nonce, k: &[u8; 32])
              -> Result<[u8; 32], NaClError> {
     let s = core_hsalsa20(array_ref![n.0, 0, 16], k, SIGMA);
     let mut c: [u8; 32] = [0; 32];
-    try!(stream_salsa20(&mut c,32,array_ref![n.0, 16, 16],&s));
+    try!(stream_salsa20(&mut c,32,array_ref![n.0, 16, 8],&s));
     Ok(c)
 }
 
 fn stream_xor(c: &mut[u8], m: &[u8], d: u64, n: &Nonce, k: &[u8; 32])
                          -> Result<(), NaClError> {
     let s = core_hsalsa20(array_ref![n.0, 0, 16], k, SIGMA);
-    stream_salsa20_xor(c,m,d,array_ref![n.0, 16, 16],&s)
+    stream_salsa20_xor(c,m,d,array_ref![n.0, 16, 8],&s)
 }
 
 fn add1305(h: &mut[u32], c: &[u32]) {
@@ -345,10 +343,17 @@ impl Display for SecretKey {
 /// A nonce.  You should never reuse a nonce for two different
 /// messages between the same set of keys.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct Nonce(pub [u8; 32]);
+pub struct Nonce(pub [u8; 24]);
 impl Display for Nonce {
     fn fmt(&self, f: &mut Formatter) -> Result<(), Error> {
-        PublicKey(self.0).fmt(f)
+        let mut s = String::new();
+        s = s + &format!("{:02x}{:02x}{:02x}{:02x}", self.0[0], self.0[1], self.0[2], self.0[3]);
+        s = s + &format!("{:02x}{:02x}{:02x}{:02x}", self.0[4], self.0[5], self.0[6], self.0[7]);
+        s = s + &format!("{:02x}{:02x}{:02x}{:02x}", self.0[8], self.0[9], self.0[10], self.0[11]);
+        s = s + &format!("{:02x}{:02x}{:02x}{:02x}", self.0[12], self.0[13], self.0[14], self.0[15]);
+        s = s + &format!("{:02x}{:02x}{:02x}{:02x}", self.0[16], self.0[17], self.0[18], self.0[19]);
+        s = s + &format!("{:02x}{:02x}{:02x}{:02x}", self.0[20], self.0[21], self.0[22], self.0[23]);
+        f.write_str(&s)
     }
 }
 
@@ -493,7 +498,7 @@ fn secretbox_works() {
     for _ in 0..plaintext.len() {
         ciphertext.push(0);
     }
-    let nonce = Nonce([0; 32]);
+    let nonce = Nonce([0; 24]);
     secretbox(&mut ciphertext, plaintext, &nonce, secretkey).unwrap();
     // There has got to be a better way to allocate an array of
     // zeros with dynamically determined type.
@@ -558,7 +563,7 @@ fn funnybox_works() {
     for _ in 0..plaintext.len() {
         ciphertext.push(0);
     }
-    let nonce = Nonce([0; 32]);
+    let nonce = Nonce([0; 24]);
     funnybox(&mut ciphertext, plaintext, nauth, &nonce, secretkey).unwrap();
     // There has got to be a better way to allocate an array of
     // zeros with dynamically determined type.
@@ -776,12 +781,20 @@ pub fn box_keypair() -> Result<KeyPair, NaClError> {
     Ok(KeyPair{ public: PublicKey(pk), secret: SecretKey(sk) })
 }
 
+/// Securely creates 32 random bytes.
+pub fn random_32() -> Result<[u8;32], NaClError> {
+    let mut rng = try!(OsRng::new());
+    let mut o = [0; 32];
+    rng.fill_bytes(&mut o);
+    Ok(o)
+}
+
 /// Securely creates a random nonce.  This function isn't in the
 /// NaCl, but I feel like it could be very handy, and a random
 /// nonce from a secure source is often what you want.
 pub fn random_nonce() -> Result<Nonce, NaClError> {
     let mut rng = try!(OsRng::new());
-    let mut n = Nonce([0; 32]);
+    let mut n = Nonce([0; 24]);
     rng.fill_bytes(&mut n.0);
     Ok(n)
 }
@@ -843,7 +856,7 @@ fn box_works() {
     for _ in 0..plaintext.len() {
         ciphertext.push(0);
     }
-    let nonce = Nonce([0; 32]);
+    let nonce = Nonce([0; 24]);
     box_up(&mut ciphertext, plaintext, &nonce, &k1.public, &k2.secret).unwrap();
     // There has got to be a better way to allocate an array of
     // zeros with dynamically determined type.
@@ -927,7 +940,7 @@ fn sillybox_works() {
     for _ in 0..plaintext.len() {
         ciphertext.push(0);
     }
-    let nonce = Nonce([0; 32]);
+    let nonce = Nonce([0; 24]);
     sillybox(&mut ciphertext, plaintext, nauth, &nonce, &k1.public, &k2.secret).unwrap();
     // There has got to be a better way to allocate an array of
     // zeros with dynamically determined type.
@@ -969,7 +982,7 @@ fn sillybox_afternm_works() {
     for _ in 0..plaintext.len() {
         ciphertext.push(0);
     }
-    let nonce = Nonce([0; 32]);
+    let nonce = Nonce([0; 24]);
     let sk = sillybox_beforenm(&k1.public, &k2.secret).unwrap();
     sillybox_afternm(&mut ciphertext, plaintext, nauth, &nonce, &sk).unwrap();
     // There has got to be a better way to allocate an array of
@@ -1390,17 +1403,17 @@ fn secretkey_is_ashow() {
 #[cfg(test)]
 impl quickcheck::Arbitrary for Nonce {
     fn arbitrary<G: quickcheck::Gen>(g: &mut G) -> Self {
-        let mut array = [u8::arbitrary(g); 32];
-        for i in 1..32 {
+        let mut array = [u8::arbitrary(g); 24];
+        for i in 1..24 {
             array[i] = u8::arbitrary(g);
         }
         Nonce(array)
     }
     fn shrink(&self) -> Box<Iterator<Item=Self>> {
-        if self.0 == [0;32] {
+        if self.0 == [0;24] {
             quickcheck::empty_shrinker()
         } else {
-            quickcheck::single_shrinker(Nonce([0;32]))
+            quickcheck::single_shrinker(Nonce([0;24]))
         }
     }
 }
