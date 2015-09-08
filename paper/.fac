@@ -1,6 +1,1 @@
 | pdflatex onionsalt.tex && bibtex onionsalt && pdflatex onionsalt.tex && pdflatex onionsalt.tex
-
-| pdflatex old-onionsalt.tex && bibtex old-onionsalt && pdflatex old-onionsalt.tex && pdflatex old-onionsalt.tex
-
-| python3 create-figures.py
-c .cache

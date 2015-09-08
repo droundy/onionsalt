@@ -78,7 +78,7 @@ const AUTHENTICATIONBYTES: usize = 16;
 
 /// The number of extra bytes needed per recipient.  Includes public
 /// key and authentication bytes.
-pub const OVERHEADBYTES: usize = 48;
+const OVERHEADBYTES: usize = 48;
 
 /// The ROUTING_LENGTH is big enough for an ipv6 address and some
 /// extra information.
@@ -102,15 +102,7 @@ const AUTH_LENGTH: usize = (ROUTE_COUNT+1)*ROUTING_OVERHEAD - AUTHENTICATIONBYTE
 pub const PACKET_LENGTH: usize =
     bytes::BUFSIZE - 16 + 32 - ROUTING_OVERHEAD;
 
-/// `ENCRYPTEDPAYLOAD_LENGTH` is the size of the encrypted payload
-/// that is intended for the primary recipient.  It differs from
-/// `PACKET_LENGTH` by the total routing overhead.
-///
-/// ```
-/// # use onionsalt::*;
-/// assert_eq!(ENCRYPTEDPAYLOAD_LENGTH, 592);
-/// ```
-pub const ENCRYPTEDPAYLOAD_LENGTH: usize = PACKET_LENGTH - ROUTE_COUNT*ROUTING_OVERHEAD;
+const ENCRYPTEDPAYLOAD_LENGTH: usize = PACKET_LENGTH - ROUTE_COUNT*ROUTING_OVERHEAD;
 
 /// `PAYLOAD_LENGTH` is the size of the payload that the primary
 /// recipient can get.  It differs from `ENCRYPTEDPAYLOAD_LENGTH` by 48
@@ -335,8 +327,10 @@ pub fn onionbox(keys_and_routings: &[(crypto::PublicKey,
     Ok(out)
 }
 
-/// The buffer already contains the message, and contains the next message
-/// on exit.
+/// The message is passed in `input`, and a struct is returned which
+/// has methods to access the decrypted routing information, the
+/// decrypted message (to be passed to the next router), to access the
+/// payload, and to insert an encrypted response to the payload.
 pub fn onionbox_open(input: &[u8; PACKET_LENGTH],
                      secret_key: &crypto::SecretKey)
                      -> Result<OpenedOnionBox, crypto::NaClError> {

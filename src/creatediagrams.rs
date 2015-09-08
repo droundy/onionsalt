@@ -33,8 +33,8 @@ fn create_short_diagram() {
 
         if i == recipient {
             // We are the recipient!
-            let mut response: [u8; ENCRYPTEDPAYLOAD_LENGTH] = [0; ENCRYPTEDPAYLOAD_LENGTH];
-            for j in 0..PAYLOAD_LENGTH {
+            let mut response: [u8; PAYLOAD_LENGTH+48] = [0; PAYLOAD_LENGTH+48];
+            for j in 0..PAYLOAD_LENGTH+48 {
                 response[j] = j as u8;
             }
             onionbox_insert_response_algorithm(&mut diagram, &response);
@@ -80,8 +80,8 @@ fn create_big_diagram() {
 
         if i == 2 {
             // We are the recipient!
-            let mut response: [u8; ENCRYPTEDPAYLOAD_LENGTH] = [0; ENCRYPTEDPAYLOAD_LENGTH];
-            for j in 0..ENCRYPTEDPAYLOAD_LENGTH {
+            let mut response: [u8; PAYLOAD_LENGTH+48] = [0; PAYLOAD_LENGTH+48];
+            for j in 0..PAYLOAD_LENGTH+48 {
                 response[j] = j as u8;
             }
             onionbox_insert_response_algorithm(&mut diagram, &response);
