@@ -102,7 +102,8 @@ const AUTH_LENGTH: usize = (ROUTE_COUNT+1)*ROUTING_OVERHEAD - AUTHENTICATIONBYTE
 pub const PACKET_LENGTH: usize =
     bytes::BUFSIZE - 16 + 32 - ROUTING_OVERHEAD;
 
-const ENCRYPTEDPAYLOAD_LENGTH: usize = PACKET_LENGTH - ROUTE_COUNT*ROUTING_OVERHEAD;
+/// The size of an encrypted payload.
+pub const ENCRYPTEDPAYLOAD_LENGTH: usize = PACKET_LENGTH - ROUTE_COUNT*ROUTING_OVERHEAD;
 
 /// `PAYLOAD_LENGTH` is the size of the payload that the primary
 /// recipient can get.  It differs from `ENCRYPTEDPAYLOAD_LENGTH` by 48
@@ -210,8 +211,13 @@ impl OnionBox {
         crypto::box_up(&mut cipher[16..], &plain, &self.payload_nonce,
                        &self.payload_recipient_key, &payload_key.secret);
         *array_mut_ref![cipher, 0, 32] = payload_key.public.0;
+        self.add_encryptedpayload(&cipher);
+        self
+    }
+    pub fn add_encryptedpayload(&mut self,
+                                ciphertext: &[u8; ENCRYPTEDPAYLOAD_LENGTH]) -> &mut Self {
         for i in 0..ENCRYPTEDPAYLOAD_LENGTH {
-            self.packet[PACKET_LENGTH - ENCRYPTEDPAYLOAD_LENGTH + i] ^= cipher[i];
+            self.packet[PACKET_LENGTH - ENCRYPTEDPAYLOAD_LENGTH + i] ^= ciphertext[i];
         }
         self
     }
