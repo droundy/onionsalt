@@ -16,9 +16,9 @@ fn create_short_diagram() {
     let mut diagram = bytes::Diagram::new();
     let mut return_key = bytes::Diagram::new();
 
-    let pairs = [crypto::box_keypair().unwrap(),
-                 crypto::box_keypair().unwrap(),
-                 crypto::box_keypair().unwrap()];
+    let pairs = [crypto::box_keypair(),
+                 crypto::box_keypair(),
+                 crypto::box_keypair()];
 
     let keys_and_routes = [(pairs[0].public, *b"123456789012345612345678"),
                            (pairs[1].public, *b"my friend is hermy frien"),
@@ -48,12 +48,12 @@ fn create_big_diagram() {
     let mut diagram = bytes::Diagram::new();
     let mut return_key = bytes::Diagram::new();
 
-    let pairs = [crypto::box_keypair().unwrap(),
-                 crypto::box_keypair().unwrap(),
-                 crypto::box_keypair().unwrap(),
-                 crypto::box_keypair().unwrap(),
-                 crypto::box_keypair().unwrap(),
-                 crypto::box_keypair().unwrap()];
+    let pairs = [crypto::box_keypair(),
+                 crypto::box_keypair(),
+                 crypto::box_keypair(),
+                 crypto::box_keypair(),
+                 crypto::box_keypair(),
+                 crypto::box_keypair()];
 
     let keys_and_routes: [(crypto::PublicKey, [u8; ROUTING_LENGTH]); ROUTE_COUNT]
                            = [(pairs[0].public, *b"123456789012345612345678"),

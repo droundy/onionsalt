@@ -11,12 +11,12 @@
 //! ```
 //! # use onionsalt::*;
 //! #
-//! let pairs = [crypto::box_keypair().unwrap(),
-//!              crypto::box_keypair().unwrap(),
-//!              crypto::box_keypair().unwrap(),
-//!              crypto::box_keypair().unwrap(),
-//!              crypto::box_keypair().unwrap(),
-//!              crypto::box_keypair().unwrap()];
+//! let pairs = [crypto::box_keypair(),
+//!              crypto::box_keypair(),
+//!              crypto::box_keypair(),
+//!              crypto::box_keypair(),
+//!              crypto::box_keypair(),
+//!              crypto::box_keypair()];
 //! let recipient = 2;
 //! let recipient_key = pairs[recipient].clone();
 //! let keys_and_routes: [(crypto::PublicKey, [u8; ROUTING_LENGTH]); ROUTE_COUNT]
@@ -29,7 +29,7 @@
 //! let mut payload: [u8; PAYLOAD_LENGTH] = [0; PAYLOAD_LENGTH];
 //! payload[3] = 3;
 //! let payload = payload;
-//! let our_personal_key = crypto::box_keypair().unwrap();
+//! let our_personal_key = crypto::box_keypair();
 //! let mut ob = onionbox(&keys_and_routes, recipient).unwrap();
 //! ob.add_payload(our_personal_key, &payload);
 //!
@@ -378,10 +378,9 @@ fn onionbox_algorithm<T: bytes::SelfDocumenting>(buffer: &mut T,
 
     // Here we create buffers for my_public_keys, my_private_keys, and
     // our plaintext.
-    let mut my_keypairs: [crypto::KeyPair; ROUTE_COUNT] =
-        [crypto::EMPTY_PAIR; ROUTE_COUNT];
-    for i in 0..route_count {
-        my_keypairs[i] = try!(crypto::box_keypair());
+    let mut my_keypairs = [crypto::box_keypair(); ROUTE_COUNT];
+    for i in 1..route_count {
+        my_keypairs[i] = crypto::box_keypair();
     }
     let mut skeys: [[u8; 32]; ROUTE_COUNT] = [[0;32]; ROUTE_COUNT];
     for i in 0..route_count {
@@ -409,8 +408,8 @@ fn onionbox_algorithm<T: bytes::SelfDocumenting>(buffer: &mut T,
         buffer.annotate(&format!("Starting with buffer of zeros."));
     } else {
         // For a short onion, we need to start with random data
-        let nonce = try!(crypto::random_nonce());
-        let skey = try!(crypto::box_keypair()).secret.0;
+        let nonce = crypto::random_nonce();
+        let skey = crypto::box_keypair().secret.0;
         buffer.sillybox_afternm(AUTH_LENGTH, &nonce, &skey, &format!("Random"));
         buffer.set_bytes(0,32, &[0;32], "0");
         buffer.set_bytes(bytes::BUFSIZE - ENCRYPTEDPAYLOAD_LENGTH - ROUTING_OVERHEAD,
@@ -534,12 +533,12 @@ fn check_onionbox_on_diagram() {
     let mut diagram = bytes::Diagram::new();
     let mut return_key = bytes::Diagram::new();
 
-    let pairs = [crypto::box_keypair().unwrap(),
-                 crypto::box_keypair().unwrap(),
-                 crypto::box_keypair().unwrap(),
-                 crypto::box_keypair().unwrap(),
-                 crypto::box_keypair().unwrap(),
-                 crypto::box_keypair().unwrap()];
+    let pairs = [crypto::box_keypair(),
+                 crypto::box_keypair(),
+                 crypto::box_keypair(),
+                 crypto::box_keypair(),
+                 crypto::box_keypair(),
+                 crypto::box_keypair()];
 
     let keys_and_routes: [(crypto::PublicKey, [u8; ROUTING_LENGTH]); ROUTE_COUNT]
                            = [(pairs[0].public, *b"123456789012345612345678"),
@@ -579,12 +578,12 @@ fn check_onionbox_on_buffer() {
     let mut buffer = bytes::Bytes([0; bytes::BUFSIZE]);
     let mut return_key = bytes::Bytes([0; bytes::BUFSIZE]);
 
-    let pairs = [crypto::box_keypair().unwrap(),
-                 crypto::box_keypair().unwrap(),
-                 crypto::box_keypair().unwrap(),
-                 crypto::box_keypair().unwrap(),
-                 crypto::box_keypair().unwrap(),
-                 crypto::box_keypair().unwrap()];
+    let pairs = [crypto::box_keypair(),
+                 crypto::box_keypair(),
+                 crypto::box_keypair(),
+                 crypto::box_keypair(),
+                 crypto::box_keypair(),
+                 crypto::box_keypair()];
 
     let keys_and_routes: [(crypto::PublicKey, [u8; ROUTING_LENGTH]); ROUTE_COUNT]
                            = [(pairs[0].public, *b"123456789012345612345678"),
@@ -613,9 +612,9 @@ fn check_short_onionbox_on_buffer() {
     let mut buffer = bytes::Bytes([0; bytes::BUFSIZE]);
     let mut return_key = bytes::Bytes([0; bytes::BUFSIZE]);
 
-    let pairs = [crypto::box_keypair().unwrap(),
-                 crypto::box_keypair().unwrap(),
-                 crypto::box_keypair().unwrap()];
+    let pairs = [crypto::box_keypair(),
+                 crypto::box_keypair(),
+                 crypto::box_keypair()];
 
     let keys_and_routes = [(pairs[0].public, *b"123456789012345612345678"),
                            (pairs[1].public, *b"my friend is hermy frien"),
@@ -772,12 +771,12 @@ fn test_short_onionbox_auth() {
 
 #[test]
 fn test_onionbox_simple() {
-    let pairs = [crypto::box_keypair().unwrap(),
-                 crypto::box_keypair().unwrap(),
-                 crypto::box_keypair().unwrap(),
-                 crypto::box_keypair().unwrap(),
-                 crypto::box_keypair().unwrap(),
-                 crypto::box_keypair().unwrap()];
+    let pairs = [crypto::box_keypair(),
+                 crypto::box_keypair(),
+                 crypto::box_keypair(),
+                 crypto::box_keypair(),
+                 crypto::box_keypair(),
+                 crypto::box_keypair()];
     let recipient = 2;
     let recipient_key = pairs[recipient].clone();
     let keys_and_routes: [(crypto::PublicKey, [u8; ROUTING_LENGTH]); ROUTE_COUNT]
@@ -790,7 +789,7 @@ fn test_onionbox_simple() {
     let mut payload: [u8; PAYLOAD_LENGTH] = [0; PAYLOAD_LENGTH];
     payload[3] = 3;
     let payload = payload;
-    let our_personal_key = crypto::box_keypair().unwrap();
+    let our_personal_key = crypto::box_keypair();
     let mut ob = onionbox(&keys_and_routes, recipient).unwrap();
     ob.add_payload(our_personal_key, &payload);
 

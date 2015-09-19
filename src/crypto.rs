@@ -34,8 +34,8 @@
 //! # use onionsalt::crypto;
 //! #
 //! // of course, in practice, don't use unwrap:  handle the error!
-//! let mykey = crypto::box_keypair().unwrap();
-//! let thykey = crypto::box_keypair().unwrap();
+//! let mykey = crypto::box_keypair();
+//! let thykey = crypto::box_keypair();
 //!
 //! let plaintext = b"Friendly message.";
 //!
@@ -46,7 +46,7 @@
 //! let mut ciphertext: vec::Vec<u8> = vec::Vec::with_capacity(padded_plaintext.len());
 //! for _ in 0..padded_plaintext.len() { ciphertext.push(0); }
 //!
-//! let nonce = crypto::random_nonce().unwrap();
+//! let nonce = crypto::random_nonce();
 //!
 //! // Here we encreypt the message.  Keep in mind when sending it
 //! // that you should strip the 16 zeros off the beginning!
@@ -212,19 +212,23 @@ pub fn random_u64() -> u64 {
     RANDOM.with(|r| { r.borrow_mut().u64() })
 }
 /// Securely creates 32 random bytes.
+pub fn random_24() -> [u8;24] {
+    RANDOM.with(|r| { r.borrow_mut().random_24() })
+}
+/// Securely creates 32 random bytes.
 pub fn random_32() -> [u8;32] {
     RANDOM.with(|r| { r.borrow_mut().random_32() })
 }
 thread_local!(static RANDOM: std::cell::RefCell<Salsa20Random>
               = std::cell::RefCell::new(Salsa20Random::new()));
-pub struct Salsa20Random {
+struct Salsa20Random {
     z: [u8;16],
     k: [u8;32],
     bytes: [u8;64],
     bytes_left: usize,
 }
 impl Salsa20Random {
-    pub fn refill(&mut self) {
+    fn refill(&mut self) {
         self.bytes = core_salsa20(&self.z,&self.k,SIGMA);
         self.bytes_left = 64;
         // now we increment the counter, which is in the last 8 bytes
@@ -236,25 +240,32 @@ impl Salsa20Random {
             u >>= 8;
         }
     }
-    pub fn byte(&mut self) -> u8 {
+    fn byte(&mut self) -> u8 {
         if self.bytes_left == 0 { self.refill(); }
         self.bytes_left -= 1;
         self.bytes[63 - self.bytes_left]
     }
-    pub fn u32(&mut self) -> u32 {
+    fn u32(&mut self) -> u32 {
         self.byte() as u32 + ((self.byte() as u32) << 8) + ((self.byte() as u32) << 16) + ((self.byte() as u32) << 24)
     }
-    pub fn u64(&mut self) -> u64 {
+    fn u64(&mut self) -> u64 {
         self.byte() as u64 + ((self.byte() as u64) << 8) + ((self.byte() as u64) << 16) + ((self.byte() as u64) << 24)
     }
-    pub fn random_32(&mut self) -> [u8;32] {
+    fn random_32(&mut self) -> [u8;32] {
         // the following is potentially wasteful, but probably not
         // much of a problem.
         if self.bytes_left < 32 { self.refill(); }
         self.bytes_left -= 32;
         *array_ref![self.bytes, self.bytes_left, 32]
     }
-    pub fn new() -> Self {
+    fn random_24(&mut self) -> [u8;24] {
+        // the following is potentially wasteful, but probably not
+        // much of a problem.
+        if self.bytes_left < 24 { self.refill(); }
+        self.bytes_left -= 24;
+        *array_ref![self.bytes, self.bytes_left, 24]
+    }
+    fn new() -> Self {
         let mut rng = OsRng::new().unwrap();
         let mut k = [0; 32];
         rng.fill_bytes(&mut k);
@@ -267,7 +278,8 @@ impl Salsa20Random {
             bytes: [0;64],
         }
     }
-    pub fn from_nonce_and_key(n: &[u8;8], k: &[u8;32]) -> Self {
+    #[cfg(test)]
+    fn from_nonce_and_key(n: &[u8;8], k: &[u8;32]) -> Self {
         let mut z: [u8; 16] = [0; 16];
         for i in 0..8 {
             z[i] = n[i];
@@ -851,33 +863,29 @@ fn scalarmult_base(q: &mut[u8], n: &[u8]) {
 
 use rand::{OsRng,Rng};
 
+/// A pair with public and secret keys.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct KeyPair {
     pub public: PublicKey,
     pub secret: SecretKey,
 }
-pub const EMPTY_PAIR: KeyPair = KeyPair{ public: PublicKey([0;32]),
-                                         secret: SecretKey([0;32]), };
 
-/// Generate a random public/secret key pair.  This is the *only*
-/// way you generate keys.
-pub fn box_keypair() -> Result<KeyPair, NaClError> {
-    let mut rng = try!(OsRng::new());
-    let mut pk: [u8; 32] = [0; 32];
-    let mut sk: [u8; 32] = [0; 32];
-    rng.fill_bytes(&mut sk);
+/// Generate a random public/secret key pair.  This is the *only* way
+/// you should generate keys.  Although of course you can store keys
+/// to disk and then read them back again.  But they always start with
+/// `box_keypair`.
+pub fn box_keypair() -> KeyPair {
+    let mut pk = [0u8; 32];
+    let sk = random_32();
     scalarmult_base(&mut pk, &sk);
-    Ok(KeyPair{ public: PublicKey(pk), secret: SecretKey(sk) })
+    KeyPair{ public: PublicKey(pk), secret: SecretKey(sk) }
 }
 
 /// Securely creates a random nonce.  This function isn't in the
 /// NaCl, but I feel like it could be very handy, and a random
 /// nonce from a secure source is often what you want.
-pub fn random_nonce() -> Result<Nonce, NaClError> {
-    let mut rng = try!(OsRng::new());
-    let mut n = Nonce([0; 24]);
-    rng.fill_bytes(&mut n.0);
-    Ok(n)
+pub fn random_nonce() -> Nonce {
+    Nonce(random_24())
 }
 
 /// Prepare to either open or encrypt some public-key messages.
@@ -927,8 +935,8 @@ fn box_works() {
     use std::vec;
 
     let plaintext: &[u8] = b"\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0This is only a test.";
-    let k1 = box_keypair().unwrap();
-    let k2 = box_keypair().unwrap();
+    let k1 = box_keypair();
+    let k2 = box_keypair();
     let mut ciphertext: vec::Vec<u8> = vec![];
     for _ in 0..plaintext.len() {
         ciphertext.push(0);
@@ -1008,8 +1016,8 @@ fn sillybox_works() {
 
     let plaintext: &[u8] = b"\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0This is only a test.";
     let nauth = "This is only".len();
-    let k1 = box_keypair().unwrap();
-    let k2 = box_keypair().unwrap();
+    let k1 = box_keypair();
+    let k2 = box_keypair();
     let mut ciphertext: vec::Vec<u8> = vec![];
     for _ in 0..plaintext.len() {
         ciphertext.push(0);
@@ -1050,8 +1058,8 @@ fn sillybox_afternm_works() {
 
     let plaintext: &[u8] = b"\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0This is only a test.";
     let nauth = "This is only".len();
-    let k1 = box_keypair().unwrap();
-    let k2 = box_keypair().unwrap();
+    let k1 = box_keypair();
+    let k2 = box_keypair();
     let mut ciphertext: vec::Vec<u8> = vec![];
     for _ in 0..plaintext.len() {
         ciphertext.push(0);
@@ -1340,7 +1348,7 @@ fn hash_works() {
 #[test]
 fn funnybox_unfunnybox_auth() {
     fn f(data: Vec<u8>, k: SecretKey, authlen: usize, whichbyte: usize) -> quickcheck::TestResult {
-        let n = random_nonce().unwrap();
+        let n = random_nonce();
         if data.len() == 0 {
             return quickcheck::TestResult::discard();
         }
@@ -1364,7 +1372,7 @@ fn funnybox_unfunnybox_auth() {
 #[test]
 fn funnybox_unfunnybox_works() {
     fn f(data: Vec<u8>, authlen: usize, whichbyte: usize) -> quickcheck::TestResult {
-        let n = random_nonce().unwrap();
+        let n = random_nonce();
         let k = SecretKey([0;32]);
         if data.len() == 0 {
             return quickcheck::TestResult::discard();
