@@ -472,7 +472,7 @@ impl Display for Nonce {
 }
 
 
-fn onetimeauth(mut m: &[u8], k: &[u8]) -> [u8; 16] {
+fn onetimeauth(mut m: &[u8], k: &[u8;32]) -> [u8; 16] {
     let mut n = m.len();
 
     let x: &mut[u32; 17] = &mut [0; 17];
@@ -551,7 +551,7 @@ fn onetimeauth(mut m: &[u8], k: &[u8]) -> [u8; 16] {
     out
 }
 
-fn onetimeauth_verify(h: &[u8; 16], m: &[u8], k: &[u8])
+fn onetimeauth_verify(h: &[u8; 16], m: &[u8], k: &[u8;32])
                       -> Result<(), NaClError> {
     let x = onetimeauth(m, k);
     verify_16(h,&x)
@@ -563,7 +563,7 @@ pub fn secretbox(c: &mut[u8], m: &[u8], n: &Nonce, k: &[u8; 32]) {
     assert_eq!(d, m.len() as u64);
     assert!(d >= 32);
     stream_xor(c,m,d,n,k);
-    let h = onetimeauth(&c[32..], c);
+    let h = onetimeauth(&c[32..], array_ref![c,0,32]);
     for i in 0..16 {
         c[i] = 0;
     }
@@ -623,7 +623,7 @@ fn funnybox(c: &mut[u8], m: &[u8], nauth: usize, n: &Nonce, k: &[u8; 32]) {
     assert!(nauth <= d as usize-32);
     assert!(d >= 32);
     stream_xor(c,m,d,n,k);
-    let h = onetimeauth(&c[32..32+nauth], c);
+    let h = onetimeauth(&c[32..32+nauth], array_ref![c,0,32]);
     for i in 0..16 {
         c[i] = 0;
     }
