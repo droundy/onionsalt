@@ -199,10 +199,118 @@ fn core_hsalsa20(n: &[u8; 16], k: &[u8; 32], c: &[u8; 16]) -> [u8; 32] {
 
 static SIGMA: &'static [u8; 16] = b"expand 32-byte k";
 
+/// Securely creates a byte.
+pub fn random_byte() -> u8 {
+    RANDOM.with(|r| { r.borrow_mut().byte() })
+}
+/// Securely creates a u32.
+pub fn random_u32() -> u32 {
+    RANDOM.with(|r| { r.borrow_mut().u32() })
+}
+/// Securely creates a u64.
+pub fn random_u64() -> u64 {
+    RANDOM.with(|r| { r.borrow_mut().u64() })
+}
+/// Securely creates 32 random bytes.
+pub fn random_32() -> [u8;32] {
+    RANDOM.with(|r| { r.borrow_mut().random_32() })
+}
+thread_local!(static RANDOM: std::cell::RefCell<Salsa20Random>
+              = std::cell::RefCell::new(Salsa20Random::new()));
+pub struct Salsa20Random {
+    z: [u8;16],
+    k: [u8;32],
+    bytes: [u8;64],
+    bytes_left: usize,
+}
+impl Salsa20Random {
+    pub fn refill(&mut self) {
+        self.bytes = core_salsa20(&self.z,&self.k,SIGMA);
+        self.bytes_left = 64;
+        // now we increment the counter, which is in the last 8 bytes
+        // of z.
+        let mut u: u64 = 1;
+        for i in 8..16 {
+            u += self.z[i] as u64;
+            self.z[i] = u as u8;
+            u >>= 8;
+        }
+    }
+    pub fn byte(&mut self) -> u8 {
+        if self.bytes_left == 0 { self.refill(); }
+        self.bytes_left -= 1;
+        self.bytes[63 - self.bytes_left]
+    }
+    pub fn u32(&mut self) -> u32 {
+        self.byte() as u32 + ((self.byte() as u32) << 8) + ((self.byte() as u32) << 16) + ((self.byte() as u32) << 24)
+    }
+    pub fn u64(&mut self) -> u64 {
+        self.byte() as u64 + ((self.byte() as u64) << 8) + ((self.byte() as u64) << 16) + ((self.byte() as u64) << 24)
+    }
+    pub fn random_32(&mut self) -> [u8;32] {
+        // the following is potentially wasteful, but probably not
+        // much of a problem.
+        if self.bytes_left < 32 { self.refill(); }
+        self.bytes_left -= 32;
+        *array_ref![self.bytes, self.bytes_left, 32]
+    }
+    pub fn new() -> Self {
+        let mut rng = OsRng::new().unwrap();
+        let mut k = [0; 32];
+        rng.fill_bytes(&mut k);
+        let mut z = [0; 16];
+        rng.fill_bytes(&mut z);
+        Salsa20Random {
+            z: z,
+            k: k,
+            bytes_left: 0,
+            bytes: [0;64],
+        }
+    }
+    pub fn from_nonce_and_key(n: &[u8;8], k: &[u8;32]) -> Self {
+        let mut z: [u8; 16] = [0; 16];
+        for i in 0..8 {
+            z[i] = n[i];
+        }
+        Salsa20Random {
+            z: z,
+            k: *k,
+            bytes_left: 0,
+            bytes: [0;64],
+        }
+    }
+}
+
+#[cfg(test)]
+const RANDOM_TEST_NUM: usize = 64;
+#[test]
+fn random_matches_stream() {
+    let k = random_32();
+    let a = random_32();
+    let n = *array_ref![&a, 0, 8];
+    println!("Initializing random");
+    let mut r = Salsa20Random::from_nonce_and_key(&n, &k);
+    let zeros = [0u8;RANDOM_TEST_NUM];
+    let mut bytes = [0u8;RANDOM_TEST_NUM];
+    println!("Salsa stream");
+    stream_salsa20_xor(&mut bytes, &zeros, RANDOM_TEST_NUM as u64, &n, &k);
+    let mut random_bytes = [0u8;RANDOM_TEST_NUM];
+    for i in 0 .. RANDOM_TEST_NUM {
+        random_bytes[i] = r.byte();
+    }
+    for i in 0 .. RANDOM_TEST_NUM {
+        println!("{} vs {}", random_bytes[i], bytes[i]);
+    }
+    for i in 0 .. RANDOM_TEST_NUM {
+        println!("Checking byte {}", i);
+        assert_eq!(bytes[i], random_bytes[i]);
+    }
+}
+
 fn stream_salsa20_xor(c: &mut[u8], mut m: &[u8], mut b: u64,
                       n: &[u8; 8], k: &[u8; 32]) {
     assert!(b != 0);
-    let mut z: [u8; 16] = [0; 16];
+    let mut z = [0u8; 16];
     for i in 0..8 {
         z[i] = n[i];
     }
@@ -760,14 +868,6 @@ pub fn box_keypair() -> Result<KeyPair, NaClError> {
     rng.fill_bytes(&mut sk);
     scalarmult_base(&mut pk, &sk);
     Ok(KeyPair{ public: PublicKey(pk), secret: SecretKey(sk) })
-}
-
-/// Securely creates 32 random bytes.
-pub fn random_32() -> Result<[u8;32], NaClError> {
-    let mut rng = try!(OsRng::new());
-    let mut o = [0; 32];
-    rng.fill_bytes(&mut o);
-    Ok(o)
 }
 
 /// Securely creates a random nonce.  This function isn't in the

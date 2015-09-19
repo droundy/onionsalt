@@ -206,7 +206,6 @@ impl OnionBox {
         for i in 0..PAYLOAD_LENGTH {
             plain[i+32] = payload_contents[i];
         }
-        // FIXME fill up plain here with the actual content to send.
         let mut cipher = [0; ENCRYPTEDPAYLOAD_LENGTH];
         crypto::box_up(&mut cipher[16..], &plain, &self.payload_nonce,
                        &self.payload_recipient_key, &payload_key.secret);
@@ -265,7 +264,7 @@ impl OpenedOnionBox {
         let mut pl = [0; PAYLOAD_LENGTH+32];
         let mut ci = [0; ENCRYPTEDPAYLOAD_LENGTH];
         *array_mut_ref![pl,32,PAYLOAD_LENGTH] = *response;
-        let rand_data = crypto::random_32().unwrap();
+        let rand_data = crypto::random_32();
         let response_nonce = crypto::Nonce(*array_ref![rand_data,0,24]);
         crypto::box_up(&mut ci[16..], &pl, &response_nonce, &self.key(),
                        &response_key.secret);
