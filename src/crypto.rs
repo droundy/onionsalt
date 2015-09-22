@@ -250,6 +250,7 @@ impl Salsa20Random {
     }
     fn u64(&mut self) -> u64 {
         self.byte() as u64 + ((self.byte() as u64) << 8) + ((self.byte() as u64) << 16) + ((self.byte() as u64) << 24)
+             + ((self.byte() as u64) << 32) + ((self.byte() as u64) << 40) + ((self.byte() as u64) << 48) + ((self.byte() as u64) << 56)
     }
     fn random_32(&mut self) -> [u8;32] {
         // the following is potentially wasteful, but probably not
