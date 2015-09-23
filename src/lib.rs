@@ -72,6 +72,8 @@ extern crate rand;
 extern crate serde;
 #[cfg(test)]
 extern crate serde_json;
+#[cfg(test)]
+extern crate tempfile;
 
 pub mod crypto;
 mod bytes;

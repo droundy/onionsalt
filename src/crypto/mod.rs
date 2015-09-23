@@ -455,7 +455,6 @@ impl serde::de::Deserialize for PublicKey {
             match String::deserialize(deserializer) {
                 Err(e) => Err(e),
                 Ok(ref bb) => {
-                    println!("I have gotten here '{}'", bb);
                     let bb = bb.as_bytes();
                     if bb.len() == 64 {
                         match hex::bytes_32(array_ref![bb,0,64]) {
@@ -476,58 +475,48 @@ impl serde::ser::Serialize for PublicKey {
 }
 #[cfg(test)]
 mod test {
-    use std::fs;
+    use std;
     use serde_json;
+    use tempfile;
+    use std::io::Seek;
 
     #[test]
     fn serialize_publickey() {
-        let name = ".test-file-public";
         let k = super::box_keypair().public;
 
-        {
-            let mut f = fs::File::create(name).unwrap();
-            serde_json::to_writer(&mut f, &k).unwrap();
-        }
-        {
-            let mut f = fs::File::open(name).unwrap();
-            let kk: super::PublicKey = serde_json::from_reader(&mut f).unwrap();
-            println!("found key {}", kk);
-            assert_eq!(kk, k);
-        }
+        let mut f = tempfile::TempFile::new().unwrap();
+        serde_json::to_writer(&mut f, &k).unwrap();
+
+        f.seek(std::io::SeekFrom::Start(0)).unwrap();
+        let kk: super::PublicKey = serde_json::from_reader(&mut f).unwrap();
+        println!("found key {}", kk);
+        assert_eq!(kk, k);
     }
 
     #[test]
     fn serialize_secretkey() {
-        let name = ".test-file-secret";
         let k = super::box_keypair().secret;
 
-        {
-            let mut f = fs::File::create(name).unwrap();
-            serde_json::to_writer(&mut f, &k).unwrap();
-        }
-        {
-            let mut f = fs::File::open(name).unwrap();
-            let kk: super::SecretKey = serde_json::from_reader(&mut f).unwrap();
-            println!("found key {}", kk);
-            assert_eq!(kk, k);
-        }
+        let mut f = tempfile::TempFile::new().unwrap();
+        serde_json::to_writer(&mut f, &k).unwrap();
+
+        f.seek(std::io::SeekFrom::Start(0)).unwrap();
+        let kk: super::SecretKey = serde_json::from_reader(&mut f).unwrap();
+        println!("found key {}", kk);
+        assert_eq!(kk, k);
     }
 
     #[test]
     fn serialize_nonce() {
-        let name = ".test-file-secret";
         let k = super::random_nonce();
 
-        {
-            let mut f = fs::File::create(name).unwrap();
-            serde_json::to_writer(&mut f, &k).unwrap();
-        }
-        {
-            let mut f = fs::File::open(name).unwrap();
-            let kk: super::Nonce = serde_json::from_reader(&mut f).unwrap();
-            println!("found key {}", kk);
-            assert_eq!(kk, k);
-        }
+        let mut f = tempfile::TempFile::new().unwrap();
+        serde_json::to_writer(&mut f, &k).unwrap();
+
+        f.seek(std::io::SeekFrom::Start(0)).unwrap();
+        let kk: super::Nonce = serde_json::from_reader(&mut f).unwrap();
+        println!("found key {}", kk);
+        assert_eq!(kk, k);
     }
 }
 
@@ -546,7 +535,6 @@ impl serde::de::Deserialize for SecretKey {
             match String::deserialize(deserializer) {
                 Err(e) => Err(e),
                 Ok(ref bb) => {
-                    println!("I have gotten here '{}'", bb);
                     let bb = bb.as_bytes();
                     if bb.len() == 64 {
                         match hex::bytes_32(array_ref![bb,0,64]) {
@@ -589,7 +577,6 @@ impl serde::de::Deserialize for Nonce {
             match String::deserialize(deserializer) {
                 Err(e) => Err(e),
                 Ok(ref bb) => {
-                    println!("I have gotten here '{}'", bb);
                     let bb = bb.as_bytes();
                     if bb.len() == 48 {
                         match hex::bytes_24(array_ref![bb,0,48]) {

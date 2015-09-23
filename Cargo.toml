@@ -11,6 +11,7 @@ documentation = "https://droundy.github.io/onionsalt"
 rand = "0.3" # Or a specific version
 serde = "0.6"
 serde_json = "0.6"
+tempfile = "1"
 
 arrayref = "0.2"
 
