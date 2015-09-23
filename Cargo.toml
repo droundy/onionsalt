@@ -1,6 +1,6 @@
 [package]
 name = "onionsalt"
-version = "0.4.1"
+version = "0.4.2"
 authors = ["David Roundy <roundyd@physics.oregonstate.edu>"]
 description = "The onion salt encryption scheme"
 license = "BSD-2-Clause"
