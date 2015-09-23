@@ -9,6 +9,7 @@
 *.pdf
 *.eps
 *Notes.bib
+.test*
 
 *.o
 *.test

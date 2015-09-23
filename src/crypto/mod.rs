@@ -76,6 +76,8 @@
 #[cfg(test)]
 extern crate quickcheck;
 
+extern crate serde;
+
 use std::num::Wrapping;
 use std::fmt::{Formatter, Error, Display};
 
@@ -445,6 +447,89 @@ impl Display for PublicKey {
         f.write_str(&s)
     }
 }
+mod hex;
+impl serde::de::Deserialize for PublicKey {
+    fn deserialize<D>(deserializer: &mut D) -> Result<Self, D::Error>
+        where D: serde::de::Deserializer {
+            use serde::de::{Deserialize,Error};
+            match String::deserialize(deserializer) {
+                Err(e) => Err(e),
+                Ok(ref bb) => {
+                    println!("I have gotten here '{}'", bb);
+                    let bb = bb.as_bytes();
+                    if bb.len() == 64 {
+                        match hex::bytes_32(array_ref![bb,0,64]) {
+                            Some(b32) => Ok(PublicKey(b32)),
+                            None => Err(D::Error::syntax("invalid hex for PublicKey")),
+                        }
+                    } else {
+                        Err(D::Error::syntax("wrong size for PublicKey"))
+                    }
+                },
+            }
+        }
+}
+impl serde::ser::Serialize for PublicKey {
+    fn serialize<S>(&self, serializer: &mut S) -> Result<(), S::Error> where S: serde::Serializer {
+        serializer.visit_str(&format!("{}", self))
+    }
+}
+#[cfg(test)]
+mod test {
+    use std::fs;
+    use serde_json;
+
+    #[test]
+    fn serialize_publickey() {
+        let name = ".test-file-public";
+        let k = super::box_keypair().public;
+
+        {
+            let mut f = fs::File::create(name).unwrap();
+            serde_json::to_writer(&mut f, &k).unwrap();
+        }
+        {
+            let mut f = fs::File::open(name).unwrap();
+            let kk: super::PublicKey = serde_json::from_reader(&mut f).unwrap();
+            println!("found key {}", kk);
+            assert_eq!(kk, k);
+        }
+    }
+
+    #[test]
+    fn serialize_secretkey() {
+        let name = ".test-file-secret";
+        let k = super::box_keypair().secret;
+
+        {
+            let mut f = fs::File::create(name).unwrap();
+            serde_json::to_writer(&mut f, &k).unwrap();
+        }
+        {
+            let mut f = fs::File::open(name).unwrap();
+            let kk: super::SecretKey = serde_json::from_reader(&mut f).unwrap();
+            println!("found key {}", kk);
+            assert_eq!(kk, k);
+        }
+    }
+
+    #[test]
+    fn serialize_nonce() {
+        let name = ".test-file-secret";
+        let k = super::random_nonce();
+
+        {
+            let mut f = fs::File::create(name).unwrap();
+            serde_json::to_writer(&mut f, &k).unwrap();
+        }
+        {
+            let mut f = fs::File::open(name).unwrap();
+            let kk: super::Nonce = serde_json::from_reader(&mut f).unwrap();
+            println!("found key {}", kk);
+            assert_eq!(kk, k);
+        }
+    }
+}
 
 /// A secret key.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -452,6 +537,32 @@ pub struct SecretKey(pub [u8; 32]);
 impl Display for SecretKey {
     fn fmt(&self, f: &mut Formatter) -> Result<(), Error> {
         PublicKey(self.0).fmt(f)
+    }
+}
+impl serde::de::Deserialize for SecretKey {
+    fn deserialize<D>(deserializer: &mut D) -> Result<Self, D::Error>
+        where D: serde::de::Deserializer {
+            use serde::de::{Deserialize,Error};
+            match String::deserialize(deserializer) {
+                Err(e) => Err(e),
+                Ok(ref bb) => {
+                    println!("I have gotten here '{}'", bb);
+                    let bb = bb.as_bytes();
+                    if bb.len() == 64 {
+                        match hex::bytes_32(array_ref![bb,0,64]) {
+                            Some(b32) => Ok(SecretKey(b32)),
+                            None => Err(D::Error::syntax("invalid hex for SecretKey")),
+                        }
+                    } else {
+                        Err(D::Error::syntax("wrong size for SecretKey"))
+                    }
+                },
+            }
+        }
+}
+impl serde::ser::Serialize for SecretKey {
+    fn serialize<S>(&self, serializer: &mut S) -> Result<(), S::Error> where S: serde::Serializer {
+        serializer.visit_str(&format!("{}", self))
     }
 }
 
@@ -469,6 +580,32 @@ impl Display for Nonce {
         s = s + &format!("{:02x}{:02x}{:02x}{:02x}", self.0[16], self.0[17], self.0[18], self.0[19]);
         s = s + &format!("{:02x}{:02x}{:02x}{:02x}", self.0[20], self.0[21], self.0[22], self.0[23]);
         f.write_str(&s)
+    }
+}
+impl serde::de::Deserialize for Nonce {
+    fn deserialize<D>(deserializer: &mut D) -> Result<Self, D::Error>
+        where D: serde::de::Deserializer {
+            use serde::de::{Deserialize,Error};
+            match String::deserialize(deserializer) {
+                Err(e) => Err(e),
+                Ok(ref bb) => {
+                    println!("I have gotten here '{}'", bb);
+                    let bb = bb.as_bytes();
+                    if bb.len() == 48 {
+                        match hex::bytes_24(array_ref![bb,0,48]) {
+                            Some(b) => Ok(Nonce(b)),
+                            None => Err(D::Error::syntax("invalid hex for Nonce")),
+                        }
+                    } else {
+                        Err(D::Error::syntax("wrong size for Nonce"))
+                    }
+                },
+            }
+        }
+}
+impl serde::ser::Serialize for Nonce {
+    fn serialize<S>(&self, serializer: &mut S) -> Result<(), S::Error> where S: serde::Serializer {
+        serializer.visit_str(&format!("{}", self))
     }
 }
 

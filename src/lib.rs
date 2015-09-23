@@ -69,6 +69,9 @@ extern crate quickcheck;
 extern crate arrayref;
 
 extern crate rand;
+extern crate serde;
+#[cfg(test)]
+extern crate serde_json;
 
 pub mod crypto;
 mod bytes;
