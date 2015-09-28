@@ -1,0 +1,446 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="generator" content="rustdoc">
+    <meta name="description" content="API documentation for the Rust `crypto` mod in crate `onionsalt`.">
+    <meta name="keywords" content="rust, rustlang, rust-lang, crypto">
+
+    <title>onionsalt::crypto - Rust</title>
+
+    <link rel="stylesheet" type="text/css" href="../../main.css">
+
+    
+    
+</head>
+<body class="rustdoc">
+    <!--[if lte IE 8]>
+    <div class="warning">
+        This old browser is unsupported and will most likely display funky
+        things.
+    </div>
+    <![endif]-->
+
+    
+
+    <section class="sidebar">
+        
+        <p class='location'><a href='../index.html'>onionsalt</a></p><script>window.sidebarCurrent = {name: 'crypto', ty: 'mod', relpath: '../'};</script><script defer src="../sidebar-items.js"></script>
+    </section>
+
+    <nav class="sub">
+        <form class="search-form js-only">
+            <div class="search-container">
+                <input class="search-input" name="search"
+                       autocomplete="off"
+                       placeholder="Click or press ‘S’ to search, ‘?’ for more options…"
+                       type="search">
+            </div>
+        </form>
+    </nav>
+
+    <section id='main' class="content mod">
+<h1 class='fqn'><span class='in-band'>Module <a href='../index.html'>onionsalt</a>::<wbr><a class='mod' href=''>crypto</a></span><span class='out-of-band'><span id='render-detail'>
+            <a id="toggle-all-docs" href="javascript:void(0)" title="collapse all docs">
+                [<span class='inner'>&#x2212;</span>]
+            </a>
+        </span><a id='src-7' class='srclink' href='../../src/onionsalt/crypto/mod.rs.html#1-1673' title='goto source code'>[src]</a></span></h1>
+<div class='docblock'><p>A rust translation of the TweetNaCl library.  It is mostly a
+direct translation, but in places I tried to make the API more
+rustic.  It has three major features, of which you are likely
+to use only one.</p>
+
+<ol>
+<li><p><strong>Authenticated symmetric-key encryption</strong> This is not so
+very often useful, but on the off chance you have a shared
+secret you could use it.</p></li>
+<li><p><strong>SHA512 hasing</strong> This again could be handy, but is not
+necesarily what you want most of the time.  And to be
+honest, you probably don&#39;t want my crude translation to
+rust of the pure C TweetNaCl implementation.</p></li>
+<li><p><strong>Public-key encryption with authentication</strong> This is what
+you want.  It allows you to send messages to a remote
+party, and ensure they aren&#39;t modified in transit.  The
+remote party can verify that you sent the message (or
+someone else did who had access to either your private key
+or <em>their</em> private key), but they can&#39;t prove that you sent
+the message.  It&#39;s a nice set of functionality, implemented
+in the functions <code>box_up</code> (which encrypts) and <code>box_open</code>
+(which decrypts and authenticates).</p></li>
+</ol>
+
+<h1 id="examples" class='section-header'><a
+                           href="#examples">Examples</a></h1>
+<p>Here is a simple example of encrypting a message and
+decrypting it.  The one thing that it doesn&#39;t demonstrate is
+that the ciphertext is padded with 16 zero bytes, which you
+probably don&#39;t want to bother sending over the network.</p>
+<pre class='rust rust-example-rendered'>
+<span class='comment'>// of course, in practice, don&#39;t use unwrap:  handle the error!</span>
+<span class='kw'>let</span> <span class='ident'>mykey</span> <span class='op'>=</span> <span class='ident'>crypto</span>::<span class='ident'>box_keypair</span>();
+<span class='kw'>let</span> <span class='ident'>thykey</span> <span class='op'>=</span> <span class='ident'>crypto</span>::<span class='ident'>box_keypair</span>();
+
+<span class='kw'>let</span> <span class='ident'>plaintext</span> <span class='op'>=</span> <span class='string'>b&quot;Friendly message.&quot;</span>;
+
+<span class='kw'>let</span> <span class='kw-2'>mut</span> <span class='ident'>padded_plaintext</span>: <span class='ident'>vec</span>::<span class='ident'>Vec</span><span class='op'>&lt;</span><span class='ident'>u8</span><span class='op'>&gt;</span> <span class='op'>=</span> <span class='ident'>vec</span>::<span class='ident'>Vec</span>::<span class='ident'>with_capacity</span>(<span class='number'>32</span><span class='op'>+</span><span class='ident'>plaintext</span>.<span class='ident'>len</span>());
+<span class='kw'>for</span> _ <span class='kw'>in</span> <span class='number'>0</span>..<span class='number'>32</span> { <span class='ident'>padded_plaintext</span>.<span class='ident'>push</span>(<span class='number'>0</span>); }
+<span class='kw'>for</span> <span class='ident'>i</span> <span class='kw'>in</span> <span class='number'>0</span>..<span class='ident'>plaintext</span>.<span class='ident'>len</span>() { <span class='ident'>padded_plaintext</span>.<span class='ident'>push</span>(<span class='ident'>plaintext</span>[<span class='ident'>i</span>]); }
+
+<span class='kw'>let</span> <span class='kw-2'>mut</span> <span class='ident'>ciphertext</span>: <span class='ident'>vec</span>::<span class='ident'>Vec</span><span class='op'>&lt;</span><span class='ident'>u8</span><span class='op'>&gt;</span> <span class='op'>=</span> <span class='ident'>vec</span>::<span class='ident'>Vec</span>::<span class='ident'>with_capacity</span>(<span class='ident'>padded_plaintext</span>.<span class='ident'>len</span>());
+<span class='kw'>for</span> _ <span class='kw'>in</span> <span class='number'>0</span>..<span class='ident'>padded_plaintext</span>.<span class='ident'>len</span>() { <span class='ident'>ciphertext</span>.<span class='ident'>push</span>(<span class='number'>0</span>); }
+
+<span class='kw'>let</span> <span class='ident'>nonce</span> <span class='op'>=</span> <span class='ident'>crypto</span>::<span class='ident'>random_nonce</span>();
+
+<span class='comment'>// Here we encreypt the message.  Keep in mind when sending it</span>
+<span class='comment'>// that you should strip the 16 zeros off the beginning!</span>
+
+<span class='ident'>crypto</span>::<span class='ident'>box_up</span>(<span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='ident'>ciphertext</span>, <span class='kw-2'>&amp;</span><span class='ident'>padded_plaintext</span>,
+               <span class='kw-2'>&amp;</span><span class='ident'>nonce</span>, <span class='kw-2'>&amp;</span><span class='ident'>thykey</span>.<span class='ident'>public</span>, <span class='kw-2'>&amp;</span><span class='ident'>mykey</span>.<span class='ident'>secret</span>);
+
+<span class='kw'>let</span> <span class='kw-2'>mut</span> <span class='ident'>decrypted</span>: <span class='ident'>vec</span>::<span class='ident'>Vec</span><span class='op'>&lt;</span><span class='ident'>u8</span><span class='op'>&gt;</span> <span class='op'>=</span> <span class='ident'>vec</span>::<span class='ident'>Vec</span>::<span class='ident'>with_capacity</span>(<span class='ident'>padded_plaintext</span>.<span class='ident'>len</span>());
+<span class='kw'>for</span> _ <span class='kw'>in</span> <span class='number'>0</span>..<span class='ident'>ciphertext</span>.<span class='ident'>len</span>() { <span class='ident'>decrypted</span>.<span class='ident'>push</span>(<span class='number'>0</span>); }
+
+<span class='comment'>// Use box_open to decrypt the message.  You REALLY don&#39;t want</span>
+<span class='comment'>// to unwrap (or ignore) the output of box_open, since this is</span>
+<span class='comment'>// how you know that the message was authenticated.</span>
+
+<span class='ident'>crypto</span>::<span class='ident'>box_open</span>(<span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='ident'>decrypted</span>, <span class='kw-2'>&amp;</span><span class='ident'>ciphertext</span>,
+                 <span class='kw-2'>&amp;</span><span class='ident'>nonce</span>, <span class='kw-2'>&amp;</span><span class='ident'>mykey</span>.<span class='ident'>public</span>, <span class='kw-2'>&amp;</span><span class='ident'>thykey</span>.<span class='ident'>secret</span>).<span class='ident'>unwrap</span>();
+
+<span class='comment'>// Note that decrypted (like padded_plaintext) has 32 bytes of</span>
+<span class='comment'>// zeros padded at the beginning.</span>
+<span class='kw'>for</span> <span class='ident'>i</span> <span class='kw'>in</span> <span class='number'>0</span>..<span class='ident'>plaintext</span>.<span class='ident'>len</span>() {
+    <span class='macro'>assert</span><span class='macro'>!</span>(<span class='ident'>plaintext</span>[<span class='ident'>i</span>] <span class='op'>==</span> <span class='ident'>decrypted</span>[<span class='ident'>i</span><span class='op'>+</span><span class='number'>32</span>]);
+}</pre>
+</div><h2 id='structs' class='section-header'><a href="#structs">Structs</a></h2>
+<table>
+                    <tr class=' module-item'>
+                        <td><a class='struct' href='struct.KeyPair.html'
+                               title='onionsalt::crypto::KeyPair'>KeyPair</a></td>
+                        <td class='docblock short'>
+                             <p>A pair with public and secret keys.</p>
+
+                        </td>
+                    </tr>
+                
+                    <tr class=' module-item'>
+                        <td><a class='struct' href='struct.Nonce.html'
+                               title='onionsalt::crypto::Nonce'>Nonce</a></td>
+                        <td class='docblock short'>
+                             <p>A nonce.  You should never reuse a nonce for two different
+messages between the same set of keys.</p>
+
+                        </td>
+                    </tr>
+                
+                    <tr class=' module-item'>
+                        <td><a class='struct' href='struct.PublicKey.html'
+                               title='onionsalt::crypto::PublicKey'>PublicKey</a></td>
+                        <td class='docblock short'>
+                             <p>A public key.</p>
+
+                        </td>
+                    </tr>
+                
+                    <tr class=' module-item'>
+                        <td><a class='struct' href='struct.SecretKey.html'
+                               title='onionsalt::crypto::SecretKey'>SecretKey</a></td>
+                        <td class='docblock short'>
+                             <p>A secret key.</p>
+
+                        </td>
+                    </tr>
+                </table><h2 id='enums' class='section-header'><a href="#enums">Enums</a></h2>
+<table>
+                    <tr class=' module-item'>
+                        <td><a class='enum' href='enum.NaClError.html'
+                               title='onionsalt::crypto::NaClError'>NaClError</a></td>
+                        <td class='docblock short'>
+                             <p>The error return type.  You can get errors for only one of three reasons:</p>
+
+                        </td>
+                    </tr>
+                </table><h2 id='functions' class='section-header'><a href="#functions">Functions</a></h2>
+<table>
+                    <tr class=' module-item'>
+                        <td><a class='fn' href='fn.box_afternm.html'
+                               title='onionsalt::crypto::box_afternm'>box_afternm</a></td>
+                        <td class='docblock short'>
+                             <p>Encrypt a message after creating a secret key using
+<code>box_beforenm</code>.  The two functions together come out to the
+same thing as <code>box_up</code>.</p>
+
+                        </td>
+                    </tr>
+                
+                    <tr class=' module-item'>
+                        <td><a class='fn' href='fn.box_beforenm.html'
+                               title='onionsalt::crypto::box_beforenm'>box_beforenm</a></td>
+                        <td class='docblock short'>
+                             <p>Prepare to either open or encrypt some public-key messages.
+This is useful if you want to handle many messages between the
+same two recipients, since it allows you to do the public-key
+business just once.</p>
+
+                        </td>
+                    </tr>
+                
+                    <tr class=' module-item'>
+                        <td><a class='fn' href='fn.box_keypair.html'
+                               title='onionsalt::crypto::box_keypair'>box_keypair</a></td>
+                        <td class='docblock short'>
+                             <p>Generate a random public/secret key pair.  This is the <em>only</em> way
+you should generate keys.  Although of course you can store keys
+to disk and then read them back again.  But they always start with
+<code>box_keypair</code>.</p>
+
+                        </td>
+                    </tr>
+                
+                    <tr class=' module-item'>
+                        <td><a class='fn' href='fn.box_open.html'
+                               title='onionsalt::crypto::box_open'>box_open</a></td>
+                        <td class='docblock short'>
+                             <p>Open a message encrypted with <code>crypto::box_up</code>.</p>
+
+                        </td>
+                    </tr>
+                
+                    <tr class=' module-item'>
+                        <td><a class='fn' href='fn.box_open_afternm.html'
+                               title='onionsalt::crypto::box_open_afternm'>box_open_afternm</a></td>
+                        <td class='docblock short'>
+                             <p>Decrypt a message using a key that was precomputed using
+<code>box_beforenm</code>.  The two functions together are the same as
+the easier-to-use <code>box_open</code>.</p>
+
+                        </td>
+                    </tr>
+                
+                    <tr class=' module-item'>
+                        <td><a class='fn' href='fn.box_up.html'
+                               title='onionsalt::crypto::box_up'>box_up</a></td>
+                        <td class='docblock short'>
+                             <p>An implementation of the NaCl function <code>crypto_box</code>, renamed
+to <code>crypto::box_up</code> because <code>box</code> is a keyword in rust.</p>
+
+                        </td>
+                    </tr>
+                
+                    <tr class=' module-item'>
+                        <td><a class='fn' href='fn.funnybox_open.html'
+                               title='onionsalt::crypto::funnybox_open'>funnybox_open</a></td>
+                        <td class='docblock short'>
+                             <p>Decrypt a message encrypted with <code>funnybox</code>, only authenticating
+the first <code>nauth</code> bytes.</p>
+
+                        </td>
+                    </tr>
+                
+                    <tr class=' module-item'>
+                        <td><a class='fn' href='fn.hash.html'
+                               title='onionsalt::crypto::hash'>hash</a></td>
+                        <td class='docblock short'>
+                             <p>Compute the SHA512 hash of some data.</p>
+
+                        </td>
+                    </tr>
+                
+                    <tr class=' module-item'>
+                        <td><a class='fn' href='fn.random_24.html'
+                               title='onionsalt::crypto::random_24'>random_24</a></td>
+                        <td class='docblock short'>
+                             <p>Securely creates 32 random bytes.</p>
+
+                        </td>
+                    </tr>
+                
+                    <tr class=' module-item'>
+                        <td><a class='fn' href='fn.random_32.html'
+                               title='onionsalt::crypto::random_32'>random_32</a></td>
+                        <td class='docblock short'>
+                             <p>Securely creates 32 random bytes.</p>
+
+                        </td>
+                    </tr>
+                
+                    <tr class=' module-item'>
+                        <td><a class='fn' href='fn.random_byte.html'
+                               title='onionsalt::crypto::random_byte'>random_byte</a></td>
+                        <td class='docblock short'>
+                             <p>Securely creates a byte.</p>
+
+                        </td>
+                    </tr>
+                
+                    <tr class=' module-item'>
+                        <td><a class='fn' href='fn.random_nonce.html'
+                               title='onionsalt::crypto::random_nonce'>random_nonce</a></td>
+                        <td class='docblock short'>
+                             <p>Securely creates a random nonce.  This function isn&#39;t in the
+NaCl, but I feel like it could be very handy, and a random
+nonce from a secure source is often what you want.</p>
+
+                        </td>
+                    </tr>
+                
+                    <tr class=' module-item'>
+                        <td><a class='fn' href='fn.random_u32.html'
+                               title='onionsalt::crypto::random_u32'>random_u32</a></td>
+                        <td class='docblock short'>
+                             <p>Securely creates a u32.</p>
+
+                        </td>
+                    </tr>
+                
+                    <tr class=' module-item'>
+                        <td><a class='fn' href='fn.random_u64.html'
+                               title='onionsalt::crypto::random_u64'>random_u64</a></td>
+                        <td class='docblock short'>
+                             <p>Securely creates a u64.</p>
+
+                        </td>
+                    </tr>
+                
+                    <tr class=' module-item'>
+                        <td><a class='fn' href='fn.secretbox.html'
+                               title='onionsalt::crypto::secretbox'>secretbox</a></td>
+                        <td class='docblock short'>
+                             <p>Use symmetric encryption to encrypt a message.</p>
+
+                        </td>
+                    </tr>
+                
+                    <tr class=' module-item'>
+                        <td><a class='fn' href='fn.secretbox_open.html'
+                               title='onionsalt::crypto::secretbox_open'>secretbox_open</a></td>
+                        <td class='docblock short'>
+                             <p>Decrypt a message encrypted with <code>secretbox</code>.</p>
+
+                        </td>
+                    </tr>
+                
+                    <tr class=' module-item'>
+                        <td><a class='fn' href='fn.sillybox.html'
+                               title='onionsalt::crypto::sillybox'>sillybox</a></td>
+                        <td class='docblock short'>
+                             <p>An implementation of public-key encryption similar to the NaCl
+function <code>crypto_box</code> (renamed <code>crypto::sillybox_up</code> in this
+package), but with the feature that it only authenticates the
+first <code>nauth</code> bytes.  This is not useful for most purposes (thus
+its silly name), but is helpful for enabling round-trip onion
+routing in which all the routing information is authenticated (to
+information leaks triggered by maliciously modified packets), but
+information may be added to the communication en-route.</p>
+
+                        </td>
+                    </tr>
+                
+                    <tr class=' module-item'>
+                        <td><a class='fn' href='fn.sillybox_afternm.html'
+                               title='onionsalt::crypto::sillybox_afternm'>sillybox_afternm</a></td>
+                        <td class='docblock short'>
+                             <p>Encrypt a message after creating a secret key using
+<code>sillybox_beforenm</code>.  The two functions together come out to the
+same thing as <code>sillybox</code>, which you should read to find out how it
+differs from the standard NaCl <code>box</code> encryption.</p>
+
+                        </td>
+                    </tr>
+                
+                    <tr class=' module-item'>
+                        <td><a class='fn' href='fn.sillybox_beforenm.html'
+                               title='onionsalt::crypto::sillybox_beforenm'>sillybox_beforenm</a></td>
+                        <td class='docblock short'>
+                             <p>Prepare to either open or encrypt some public-key messages.
+This is useful if you want to handle many messages between the
+same two recipients, since it allows you to do the public-key
+business just once.</p>
+
+                        </td>
+                    </tr>
+                
+                    <tr class=' module-item'>
+                        <td><a class='fn' href='fn.sillybox_open.html'
+                               title='onionsalt::crypto::sillybox_open'>sillybox_open</a></td>
+                        <td class='docblock short'>
+                             <p>Open a message encrypted with <code>crypto::sillybox_up</code>, only
+authenticating the first <code>nauth</code> bytes.  It is your business to
+separately verify (or distrust) the remaining bytes.  An obvious
+approach would be to nest in the remaining bytes an encrypted and
+authenticated message.</p>
+
+                        </td>
+                    </tr>
+                
+                    <tr class=' module-item'>
+                        <td><a class='fn' href='fn.sillybox_open_afternm.html'
+                               title='onionsalt::crypto::sillybox_open_afternm'>sillybox_open_afternm</a></td>
+                        <td class='docblock short'>
+                             <p>Decrypt a message using a key that was precomputed using
+<code>sillybox_beforenm</code>.  The two functions together are the same as
+the easier-to-use <code>sillybox_open</code>.</p>
+
+                        </td>
+                    </tr>
+                </table></section>
+    <section id='search' class="content hidden"></section>
+
+    <section class="footer"></section>
+
+    <div id="help" class="hidden">
+        <div>
+            <div class="shortcuts">
+                <h1>Keyboard Shortcuts</h1>
+
+                <dl>
+                    <dt>?</dt>
+                    <dd>Show this help dialog</dd>
+                    <dt>S</dt>
+                    <dd>Focus the search field</dd>
+                    <dt>&larrb;</dt>
+                    <dd>Move up in search results</dd>
+                    <dt>&rarrb;</dt>
+                    <dd>Move down in search results</dd>
+                    <dt>&#9166;</dt>
+                    <dd>Go to active search result</dd>
+                </dl>
+            </div>
+
+            <div class="infos">
+                <h1>Search Tricks</h1>
+
+                <p>
+                    Prefix searches with a type followed by a colon (e.g.
+                    <code>fn:</code>) to restrict the search to a given type.
+                </p>
+
+                <p>
+                    Accepted types are: <code>fn</code>, <code>mod</code>,
+                    <code>struct</code>, <code>enum</code>,
+                    <code>trait</code>, <code>typedef</code> (or
+                    <code>tdef</code>).
+                </p>
+
+                <p>
+                    Search functions by type signature (e.g.
+                    <code>vec -> usize</code>)
+                </p>
+            </div>
+        </div>
+    </div>
+
+    
+
+    <script>
+        window.rootPath = "../../";
+        window.currentCrate = "onionsalt";
+        window.playgroundUrl = "";
+    </script>
+    <script src="../../jquery.js"></script>
+    <script src="../../main.js"></script>
+    
+    <script async src="../../search-index.js"></script>
+</body>
+</html>
