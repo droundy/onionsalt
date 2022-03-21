@@ -16,4 +16,4 @@ tempfile = "1"
 arrayref = "0.2"
 
 [dev-dependencies]
-quickcheck = "*"
+quickcheck = "0.5"

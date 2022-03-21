@@ -60,7 +60,7 @@
 //! # }
 //! ```
 
-#![deny(warnings)]
+// #![deny(warnings)]
 
 #[cfg(test)]
 extern crate quickcheck;

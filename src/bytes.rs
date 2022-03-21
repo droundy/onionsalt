@@ -1,4 +1,4 @@
-#![deny(warnings)]
+// #![deny(warnings)]
 
 pub const PACKET_LENGTH: usize = 1024;
 
